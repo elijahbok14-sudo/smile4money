@@ -384,6 +384,7 @@ fn test_submit_result_random_caller_is_unauthorized() {
     );
 }
 
+// Issue #196: submit_result on a Pending match should return InvalidState
 #[test]
 fn test_submit_result_on_pending_match_fails() {
     let (env, contract_id, oracle, player1, player2, token, _admin) = setup();
