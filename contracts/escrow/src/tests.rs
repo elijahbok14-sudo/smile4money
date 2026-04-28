@@ -1298,3 +1298,61 @@ fn test_submit_result_on_cancelled_match_fails() {
         Err(Ok(Error::InvalidState))
     );
 }
+
+// Issue #198: cancel_match on an Active match (both players deposited) must return InvalidState
+#[test]
+fn test_cancel_active_match_returns_invalid_state() {
+    let (env, contract_id, _oracle, player1, player2, token, _admin) = setup();
+    let client = EscrowContractClient::new(&env, &contract_id);
+
+    let id = client.create_match(
+        &player1,
+        &player2,
+        &100,
+        &token,
+        &String::from_str(&env, "issue198_game"),
+        &Platform::Lichess,
+    );
+    client.deposit(&id, &player1);
+    client.deposit(&id, &player2);
+
+    // Match is now Active — cancel must be rejected
+    assert_eq!(client.get_match(&id).state, MatchState::Active);
+    assert_eq!(
+        client.try_cancel_match(&id, &player1),
+        Err(Ok(Error::InvalidState))
+    );
+}
+
+// Issue #199: Draw payout returns exact stake_amount to each player; contract balance returns to zero
+#[test]
+fn test_draw_payout_returns_exact_stake_to_each_player() {
+    let (env, contract_id, oracle, player1, player2, token, _admin) = setup();
+    let client = EscrowContractClient::new(&env, &contract_id);
+    let token_client = TokenClient::new(&env, &token);
+
+    let stake = 250_i128;
+    let id = client.create_match(
+        &player1,
+        &player2,
+        &stake,
+        &token,
+        &String::from_str(&env, "issue199_game"),
+        &Platform::Lichess,
+    );
+    client.deposit(&id, &player1);
+    client.deposit(&id, &player2);
+    client.submit_result(
+        &id,
+        &String::from_str(&env, "issue199_game"),
+        &Winner::Draw,
+        &oracle,
+    );
+
+    // Each player gets back exactly their stake_amount
+    assert_eq!(token_client.balance(&player1), 1000); // 1000 - 250 + 250
+    assert_eq!(token_client.balance(&player2), 1000); // 1000 - 250 + 250
+    // Contract holds nothing after draw payout
+    assert_eq!(client.get_escrow_balance(&id), 0);
+    assert_eq!(client.get_match(&id).state, MatchState::Completed);
+}
