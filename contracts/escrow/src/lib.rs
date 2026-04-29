@@ -346,7 +346,11 @@ impl EscrowContract {
     }
 
     /// Cancel a pending match and refund any deposits.
-    /// Either player can cancel a pending match.
+    ///
+    /// Authorization model:
+    /// - If neither or only one player has deposited: the calling player's auth suffices.
+    /// - If both players have deposited: both players must authorize, because cancelling
+    ///   would withdraw funds that the other player has already committed.
     pub fn cancel_match(env: Env, match_id: u64, caller: Address) -> Result<(), Error> {
         if Self::is_paused(&env) {
             return Err(Error::ContractPaused);
@@ -368,7 +372,14 @@ impl EscrowContract {
             return Err(Error::Unauthorized);
         }
 
-        caller.require_auth();
+        // When both players have deposited, both must consent to cancellation
+        // to prevent one player from unilaterally withdrawing the other's funds.
+        if m.player1_deposited && m.player2_deposited {
+            m.player1.require_auth();
+            m.player2.require_auth();
+        } else {
+            caller.require_auth();
+        }
 
         let client = token::Client::new(&env, &m.token);
         if m.player1_deposited {
