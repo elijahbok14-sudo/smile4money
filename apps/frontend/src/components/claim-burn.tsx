@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import './claim-burn.css';
 
 type Mode = 'claim' | 'burn';
 
