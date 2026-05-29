@@ -1,14 +1,19 @@
 import React, { useMemo, useState } from 'react';
+import React, { useState } from 'react';
+import '../styles/claim-burn.css';
 
 type Mode = 'claim' | 'burn';
 
-type WalletState = 'disconnected' | 'connecting' | 'connected';
+type WalletState = 'checking' | 'notInstalled' | 'disconnected' | 'connecting' | 'connected' | 'wrongNetwork';
 
 interface ClaimBurnProps {
   walletState?: WalletState;
   onConnect?: () => void;
   onClaim?: (amount: string) => Promise<void>;
   onBurn?: (amount: string) => Promise<void>;
+  onSwitchNetwork?: () => void;
+  publicKey?: string | null;
+  expectedNetwork?: string;
 }
 
 const styles = {
@@ -100,6 +105,9 @@ export function ClaimBurn({
   onConnect,
   onClaim,
   onBurn,
+  onSwitchNetwork,
+  publicKey,
+  expectedNetwork = 'testnet',
 }: ClaimBurnProps) {
   const [mode, setMode] = useState<Mode>('claim');
   const [amount, setAmount] = useState('');
@@ -131,112 +139,150 @@ export function ClaimBurn({
     }
   }
 
-  function switchMode(nextMode: Mode) {
-    setMode(nextMode);
-    setStatus('idle');
-    setErrorMsg('');
+  function renderNotInstalled() {
+    return (
+      <div className="wallet-state" data-testid="wallet-not-installed">
+        <div className="wallet-state-icon">&#9888;&#65039;</div>
+        <h3 className="wallet-state-title">Freighter Not Found</h3>
+        <p className="wallet-state-message">
+          Please install the{' '}
+          <a href="https://freighter.app" target="_blank" rel="noopener noreferrer">
+            Freighter wallet extension
+          </a>{' '}
+          to continue.
+        </p>
+      </div>
+    );
   }
 
-  if (walletState === 'disconnected') {
+  function renderDisconnected() {
     return (
-      <div data-testid="claim-burn" style={styles.panel}>
-        <p style={styles.walletPrompt}>Connect your wallet to continue.</p>
-        <button
-          type="button"
-          style={{ ...styles.button, ...styles.connectButton }}
-          onClick={onConnect}
-          data-testid="connect-wallet-btn"
-        >
+      <div className="wallet-state" data-testid="wallet-disconnected">
+        <div className="wallet-state-icon">&#128188;</div>
+        <h3 className="wallet-state-title">Connect Your Wallet</h3>
+        <p className="wallet-state-message">
+          Connect your Freighter wallet to claim rewards or burn tokens.
+        </p>
+        <button className="btn btn-connect" onClick={onConnect} data-testid="connect-wallet-btn">
           Connect Wallet
         </button>
       </div>
     );
   }
 
-  if (walletState === 'connecting') {
+  function renderConnecting() {
     return (
-      <div data-testid="claim-burn" style={styles.panel}>
-        <p style={styles.walletPrompt} data-testid="connecting-msg">
-          Connecting…
-        </p>
+      <div className="wallet-state" data-testid="wallet-connecting">
+        <div className="spinner" />
+        <p className="wallet-state-message">Connecting to Freighter&hellip;</p>
       </div>
     );
   }
 
-  return (
-    <div data-testid="claim-burn" style={styles.panel}>
-      <div style={styles.toggleGroup} role="group" aria-label="Select action mode">
-        {(['claim', 'burn'] as Mode[]).map((buttonMode) => {
-          const active = mode === buttonMode;
-          return (
-            <button
-              key={buttonMode}
-              type="button"
-              style={{
-                ...styles.toggleButton,
-                ...(active ? styles.toggleActive : {}),
-              }}
-              onClick={() => switchMode(buttonMode)}
-              aria-pressed={active}
-              data-testid={`toggle-${buttonMode}`}
-            >
-              {buttonMode === 'claim' ? 'Claim' : 'Burn'}
-            </button>
-          );
-        })}
-      </div>
-
-      <form onSubmit={handleSubmit} data-testid="claim-burn-form" style={styles.fieldset}>
-        <label htmlFor="amount" style={styles.label}>
-          Amount (XLM)
-        </label>
-        <input
-          id="amount"
-          type="number"
-          min="0"
-          step="any"
-          value={amount}
-          onChange={(e) => {
-            setAmount(e.target.value);
-            setStatus('idle');
-            setErrorMsg('');
-          }}
-          placeholder="0.00"
-          disabled={status === 'pending'}
-          style={styles.input}
-          data-testid="amount-input"
-        />
+  function renderWrongNetwork() {
+    return (
+      <div className="wallet-state" data-testid="wallet-wrong-network">
+        <div className="wallet-state-icon">&#127760;</div>
+        <h3 className="wallet-state-title">Wrong Network</h3>
+        <p className="wallet-state-message">
+          Please switch your Freighter wallet to <strong>{expectedNetwork}</strong>.
+        </p>
         <button
-          type="submit"
-          style={{ ...styles.button, ...styles.actionButton, opacity: isSubmitDisabled ? 0.65 : 1 }}
-          disabled={isSubmitDisabled}
-          data-testid="submit-btn"
+          className="btn btn-switch-network"
+          onClick={onSwitchNetwork}
+          data-testid="switch-network-btn"
         >
-          {status === 'pending' ? `${actionLabel}ing…` : actionLabel}
+          Switch to {expectedNetwork}
         </button>
-      </form>
-
-      <div aria-live="polite" aria-atomic="true">
-        {status === 'success' && (
-          <p
-            role="status"
-            style={{ ...styles.feedback, ...styles.successText }}
-            data-testid="success-msg"
-          >
-            {mode === 'claim' ? 'Claimed successfully!' : 'Burned successfully!'}
-          </p>
-        )}
-
-        {status === 'error' && (
-          <p
-            role="alert"
-            style={{ ...styles.feedback, ...styles.errorText }}
-            data-testid="error-msg"
-          >
-            {errorMsg}
-          </p>
-        )}
       </div>
+    );
+  }
+
+  function renderForm() {
+    return (
+      <>
+        <div className="toggle" role="group" aria-label="Select mode">
+          <button
+            className={`toggle-btn${mode === 'claim' ? ' active' : ''}`}
+            onClick={() => { setMode('claim'); setStatus('idle'); }}
+            aria-pressed={mode === 'claim'}
+            data-testid="toggle-claim"
+          >
+            Claim
+          </button>
+          <button
+            className={`toggle-btn${mode === 'burn' ? ' active' : ''}`}
+            onClick={() => { setMode('burn'); setStatus('idle'); }}
+            aria-pressed={mode === 'burn'}
+            data-testid="toggle-burn"
+          >
+            Burn
+          </button>
+        </div>
+
+        {publicKey && (
+          <div className="wallet-info" data-testid="wallet-info">
+            <span className="wallet-info-label">Connected</span>
+            <span className="wallet-info-address">
+              {publicKey.slice(0, 4)}&hellip;{publicKey.slice(-4)}
+            </span>
+          </div>
+        )}
+
+        <form onSubmit={handleSubmit} data-testid="claim-burn-form">
+          <label htmlFor="amount">
+            {mode === 'claim' ? 'Claim amount' : 'Burn amount'} (XLM)
+          </label>
+          <input
+            id="amount"
+            type="number"
+            min="0"
+            step="any"
+            value={amount}
+            onChange={(e) => { setAmount(e.target.value); setStatus('idle'); }}
+            placeholder="0.00"
+            disabled={status === 'pending'}
+            data-testid="amount-input"
+          />
+          <button
+            type="submit"
+            className={`btn btn-${mode}`}
+            disabled={status === 'pending' || !amount || Number(amount) <= 0}
+            data-testid="submit-btn"
+          >
+            {status === 'pending' ? 'Processing\u2026' : mode === 'claim' ? 'Claim' : 'Burn'}
+          </button>
+        </form>
+
+        <div aria-live="polite" aria-atomic="true">
+          {status === 'success' && (
+            <p className="feedback success" role="status" data-testid="success-msg">
+              {mode === 'claim' ? 'Claimed successfully!' : 'Burned successfully!'}
+            </p>
+          )}
+          {status === 'error' && (
+            <p className="feedback error" role="alert" data-testid="error-msg">
+              {errorMsg}
+            </p>
+          )}
+        </div>
+      </>
+    );
+  }
+
+  const stateMap: Record<WalletState, React.ReactNode> = {
+    checking: renderConnecting(),
+    notInstalled: renderNotInstalled(),
+    disconnected: renderDisconnected(),
+    connecting: renderConnecting(),
+    wrongNetwork: renderWrongNetwork(),
+    connected: renderForm(),
+  };
+
+  return (
+    <div className="claim-burn" data-testid="claim-burn">
+      <h2 className="claim-burn-title">Claim &amp; Burn</h2>
+      {stateMap[walletState]}
     </div>
   );
 }
