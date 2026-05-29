@@ -8,6 +8,8 @@ type SubmitPhase = 'idle' | 'confirm' | 'pending' | 'success' | 'error';
 
 type WalletStateProp = string | { status: string; balance?: string | null };
 
+type SubmitStatus = 'idle' | 'pending' | 'success' | 'error';
+
 interface ClaimBurnProps {
   walletState: WalletStateProp;
   onConnect?: () => void;
