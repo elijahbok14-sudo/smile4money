@@ -1,78 +1,54 @@
 import React, { useState } from 'react';
 
-interface FormData {
-  email: string;
-  password: string;
-  confirmPassword: string;
-}
-
-interface Errors {
-  email?: string;
-  password?: string;
-  confirmPassword?: string;
-}
-
 interface RegistrationFormProps {
-  onSubmit?: (data: Omit<FormData, 'confirmPassword'>) => void | Promise<void>;
+  onSubmit?: (data: { email: string; password: string }) => void | Promise<void>;
 }
 
-function validate(data: FormData): Errors {
-  const errors: Errors = {};
-  if (!data.email) {
-    errors.email = 'Email is required';
-  } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(data.email)) {
-    errors.email = 'Invalid email address';
-  }
-  if (!data.password) {
-    errors.password = 'Password is required';
-  } else if (data.password.length < 8) {
-    errors.password = 'Password must be at least 8 characters';
-  } else if (!/(?=.*[A-Z])(?=.*\d)/.test(data.password)) {
-    errors.password = 'Password must contain an uppercase letter and a number';
-  }
-  if (data.password && data.confirmPassword && data.password !== data.confirmPassword) {
-    errors.confirmPassword = 'Passwords do not match';
-  }
-  return errors;
+type Fields = { email: string; password: string; confirmPassword: string };
+type Errors = Partial<Record<keyof Fields, string>>;
+
+function validateFields({ email, password, confirmPassword }: Fields): Errors {
+  const errs: Errors = {};
+  if (!email) errs.email = 'Email is required';
+  else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) errs.email = 'Invalid email address';
+  if (!password) errs.password = 'Password is required';
+  else if (password.length < 8) errs.password = 'Password must be at least 8 characters';
+  else if (!/(?=.*[A-Z])(?=.*\d)/.test(password)) errs.password = 'Password must contain uppercase and a number';
+  if (password && confirmPassword && password !== confirmPassword)
+    errs.confirmPassword = 'Passwords do not match';
+  return errs;
 }
 
 export function RegistrationForm({ onSubmit }: RegistrationFormProps) {
-  const [data, setData] = useState<FormData>({ email: '', password: '', confirmPassword: '' });
+  const [fields, setFields] = useState<Fields>({ email: '', password: '', confirmPassword: '' });
   const [errors, setErrors] = useState<Errors>({});
-  const [touched, setTouched] = useState<Partial<Record<keyof FormData, boolean>>>({});
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
 
-  function handleChange(field: keyof FormData, value: string) {
-    const next = { ...data, [field]: value };
-    setData(next);
-    // Show errors on change once the field has been touched OR if any field was touched via submit
-    const newTouched = { ...touched, [field]: true };
-    setTouched(newTouched);
-    setErrors(validate(next));
+  function update(key: keyof Fields, value: string) {
+    const next = { ...fields, [key]: value };
+    setFields(next);
+    // Re-validate with new values so errors clear in real-time
+    const errs = validateFields(next);
+    setErrors((prev) => ({ ...prev, [key]: errs[key], confirmPassword: errs.confirmPassword }));
   }
 
-  function handleBlur(field: keyof FormData) {
-    setTouched((t) => ({ ...t, [field]: true }));
-    setErrors(validate(data));
+  function blur(key: keyof Fields) {
+    const errs = validateFields(fields);
+    setErrors((prev) => ({ ...prev, [key]: errs[key] }));
   }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    const allTouched = { email: true, password: true, confirmPassword: true };
-    setTouched(allTouched);
-    const errs = validate(data);
+    const errs = validateFields(fields);
     setErrors(errs);
-    if (Object.keys(errs).length > 0 || !data.email || !data.password) return;
+    if (Object.keys(errs).length > 0) return;
+    if (submitted) return;
     setSubmitting(true);
-    await onSubmit?.({ email: data.email, password: data.password });
-    setSubmitting(false);
     setSubmitted(true);
+    await onSubmit?.({ email: fields.email, password: fields.password });
+    setSubmitting(false);
   }
-
-  const errs = validate(data);
-  const isValid = !!(data.email && data.password && data.confirmPassword &&
-    Object.keys(errs).length === 0);
 
   return (
     <form onSubmit={handleSubmit} noValidate>
@@ -81,40 +57,38 @@ export function RegistrationForm({ onSubmit }: RegistrationFormProps) {
         <input
           id="email"
           type="email"
-          value={data.email}
-          onChange={(e) => handleChange('email', e.target.value)}
-          onBlur={() => handleBlur('email')}
+          value={fields.email}
+          onChange={(e) => update('email', e.target.value)}
+          onBlur={() => blur('email')}
+          aria-describedby={errors.email ? 'email-error' : undefined}
         />
-        {touched.email && errors.email && <span>{errors.email}</span>}
+        {errors.email && <span id="email-error">{errors.email}</span>}
       </div>
-
       <div>
         <label htmlFor="password">Password</label>
         <input
           id="password"
           type="password"
-          value={data.password}
-          onChange={(e) => handleChange('password', e.target.value)}
-          onBlur={() => handleBlur('password')}
+          value={fields.password}
+          onChange={(e) => update('password', e.target.value)}
+          onBlur={() => blur('password')}
+          aria-describedby={errors.password ? 'password-error' : undefined}
         />
-        {touched.password && errors.password && <span>{errors.password}</span>}
+        {errors.password && <span id="password-error">{errors.password}</span>}
       </div>
-
       <div>
         <label htmlFor="confirmPassword">Confirm Password</label>
         <input
           id="confirmPassword"
           type="password"
-          value={data.confirmPassword}
-          onChange={(e) => handleChange('confirmPassword', e.target.value)}
-          onBlur={() => handleBlur('confirmPassword')}
+          value={fields.confirmPassword}
+          onChange={(e) => update('confirmPassword', e.target.value)}
+          onBlur={() => blur('confirmPassword')}
+          aria-describedby={errors.confirmPassword ? 'confirm-error' : undefined}
         />
-        {touched.confirmPassword && errors.confirmPassword && (
-          <span>{errors.confirmPassword}</span>
-        )}
+        {errors.confirmPassword && <span id="confirm-error">{errors.confirmPassword}</span>}
       </div>
-
-      <button type="submit" disabled={submitting || (submitted && isValid)}>
+      <button type="submit" disabled={submitting}>
         Register
       </button>
     </form>
