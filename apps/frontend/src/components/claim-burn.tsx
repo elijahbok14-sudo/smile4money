@@ -1,19 +1,27 @@
 import React, { useState } from 'react';
-
-type Mode = 'claim' | 'burn';
-
-type WalletState = 'disconnected' | 'connecting' | 'connected';
+import type { WalletState, Mode } from '../types';
 
 interface ClaimBurnProps {
-  walletState?: WalletState;
+  walletState: WalletState;
   onConnect?: () => void;
+  onDisconnect?: () => void;
   onClaim?: (amount: string) => Promise<void>;
   onBurn?: (amount: string) => Promise<void>;
 }
 
+function formatAddress(addr: string): string {
+  return `${addr.slice(0, 4)}…${addr.slice(-4)}`;
+}
+
+function isPositiveNumber(val: string): boolean {
+  const n = Number(val);
+  return val !== '' && !Number.isNaN(n) && n > 0;
+}
+
 export function ClaimBurn({
-  walletState = 'disconnected',
+  walletState,
   onConnect,
+  onDisconnect,
   onClaim,
   onBurn,
 }: ClaimBurnProps) {
@@ -24,7 +32,7 @@ export function ClaimBurn({
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!amount || Number(amount) <= 0) return;
+    if (!isPositiveNumber(amount)) return;
 
     setStatus('pending');
     setErrorMsg('');
@@ -42,10 +50,24 @@ export function ClaimBurn({
     }
   }
 
-  if (walletState === 'disconnected') {
+  function handleAmountChange(e: React.ChangeEvent<HTMLInputElement>) {
+    setAmount(e.target.value);
+    if (status === 'success' || status === 'error') {
+      setStatus('idle');
+    }
+  }
+
+  function handleToggle(newMode: Mode) {
+    setMode(newMode);
+    if (status === 'success' || status === 'error') {
+      setStatus('idle');
+    }
+  }
+
+  if (walletState.status === 'disconnected') {
     return (
       <div className="claim-burn" data-testid="claim-burn">
-        <p className="wallet-prompt">Connect your wallet to continue</p>
+        <p className="wallet-prompt">Connect your Freighter wallet to continue</p>
         <button
           className="btn btn-connect"
           onClick={onConnect}
@@ -57,23 +79,56 @@ export function ClaimBurn({
     );
   }
 
-  if (walletState === 'connecting') {
+  if (walletState.status === 'connecting') {
     return (
       <div className="claim-burn" data-testid="claim-burn">
         <p className="wallet-connecting" data-testid="connecting-msg">
-          Connecting…
+          Connecting to Freighter…
         </p>
+      </div>
+    );
+  }
+
+  if (walletState.status === 'error') {
+    return (
+      <div className="claim-burn" data-testid="claim-burn">
+        <div className="wallet-error">
+          <p data-testid="wallet-error-msg">
+            {walletState.error || 'An unknown error occurred'}
+          </p>
+          <button
+            className="btn btn-connect"
+            onClick={onConnect}
+            data-testid="retry-connect-btn"
+          >
+            Retry
+          </button>
+        </div>
       </div>
     );
   }
 
   return (
     <div className="claim-burn" data-testid="claim-burn">
-      {/* Toggle */}
+      <div className="wallet-info">
+        <span className="wallet-address" data-testid="wallet-address">
+          {formatAddress(walletState.address || '')}
+        </span>
+        {onDisconnect && (
+          <button
+            className="btn btn-disconnect"
+            onClick={onDisconnect}
+            data-testid="disconnect-btn"
+          >
+            Disconnect
+          </button>
+        )}
+      </div>
+
       <div className="toggle" role="group" aria-label="Select mode">
         <button
           className={`toggle-btn${mode === 'claim' ? ' active' : ''}`}
-          onClick={() => { setMode('claim'); setStatus('idle'); }}
+          onClick={() => handleToggle('claim')}
           aria-pressed={mode === 'claim'}
           data-testid="toggle-claim"
         >
@@ -81,7 +136,7 @@ export function ClaimBurn({
         </button>
         <button
           className={`toggle-btn${mode === 'burn' ? ' active' : ''}`}
-          onClick={() => { setMode('burn'); setStatus('idle'); }}
+          onClick={() => handleToggle('burn')}
           aria-pressed={mode === 'burn'}
           data-testid="toggle-burn"
         >
@@ -89,16 +144,22 @@ export function ClaimBurn({
         </button>
       </div>
 
-      {/* Form */}
-      <form onSubmit={handleSubmit} data-testid="claim-burn-form">
-        <label htmlFor="amount">Amount (XLM)</label>
+      <form onSubmit={handleSubmit} className="claim-burn-form" data-testid="claim-burn-form">
+        <label htmlFor="amount">
+          {mode === 'claim' ? 'Amount to claim' : 'Amount to burn'}
+          {walletState.balance !== null && (
+            <span style={{ marginLeft: '0.5rem', fontWeight: 400, color: '#94a3b8' }}>
+              (Balance: {walletState.balance} XLM)
+            </span>
+          )}
+        </label>
         <input
           id="amount"
           type="number"
           min="0"
           step="any"
           value={amount}
-          onChange={(e) => { setAmount(e.target.value); setStatus('idle'); }}
+          onChange={handleAmountChange}
           placeholder="0.00"
           disabled={status === 'pending'}
           data-testid="amount-input"
@@ -106,14 +167,17 @@ export function ClaimBurn({
         <button
           type="submit"
           className={`btn btn-${mode}`}
-          disabled={status === 'pending' || !amount || Number(amount) <= 0}
+          disabled={status === 'pending' || !isPositiveNumber(amount)}
           data-testid="submit-btn"
         >
-          {status === 'pending' ? 'Processing…' : mode === 'claim' ? 'Claim' : 'Burn'}
+          {status === 'pending'
+            ? 'Processing…'
+            : mode === 'claim'
+              ? 'Claim'
+              : 'Burn'}
         </button>
       </form>
 
-      {/* Feedback */}
       <div aria-live="polite" aria-atomic="true">
         {status === 'success' && (
           <p className="feedback success" role="status" data-testid="success-msg">

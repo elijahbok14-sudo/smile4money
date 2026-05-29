@@ -1,0 +1,10 @@
+export type WalletStatus = 'disconnected' | 'connecting' | 'connected' | 'error';
+
+export type Mode = 'claim' | 'burn';
+
+export interface WalletState {
+  status: WalletStatus;
+  address: string | null;
+  error: string | null;
+  balance: string | null;
+}

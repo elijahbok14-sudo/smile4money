@@ -1,0 +1,200 @@
+.claim-burn {
+  max-width: 400px;
+  margin: 3rem auto;
+  padding: 2rem;
+  border-radius: 12px;
+  background: #ffffff;
+  box-shadow: 0 2px 16px rgba(0, 0, 0, 0.08);
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+}
+
+.wallet-prompt {
+  text-align: center;
+  color: #64748b;
+  margin-bottom: 1rem;
+  font-size: 0.95rem;
+}
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  border-radius: 8px;
+  font-size: 0.95rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s, opacity 0.15s;
+}
+
+.btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.btn-connect {
+  width: 100%;
+  padding: 0.75rem 1.5rem;
+  background: #6366f1;
+  color: #fff;
+}
+
+.btn-connect:hover:not(:disabled) {
+  background: #4f46e5;
+}
+
+.btn-disconnect {
+  padding: 0.4rem 0.85rem;
+  font-size: 0.8rem;
+  background: #e2e8f0;
+  color: #475569;
+  border-radius: 6px;
+}
+
+.btn-disconnect:hover:not(:disabled) {
+  background: #cbd5e1;
+}
+
+.btn-claim {
+  width: 100%;
+  padding: 0.75rem 1.5rem;
+  background: #22c55e;
+  color: #fff;
+}
+
+.btn-claim:hover:not(:disabled) {
+  background: #16a34a;
+}
+
+.btn-burn {
+  width: 100%;
+  padding: 0.75rem 1.5rem;
+  background: #ef4444;
+  color: #fff;
+}
+
+.btn-burn:hover:not(:disabled) {
+  background: #dc2626;
+}
+
+/* Wallet info bar */
+.wallet-info {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 1.5rem;
+  padding: 0.65rem 1rem;
+  background: #f8fafc;
+  border-radius: 8px;
+  border: 1px solid #e2e8f0;
+}
+
+.wallet-address {
+  font-family: 'SF Mono', 'Fira Code', 'Fira Mono', monospace;
+  font-size: 0.85rem;
+  color: #1e293b;
+}
+
+/* Toggle */
+.toggle {
+  display: flex;
+  background: #f1f5f9;
+  border-radius: 8px;
+  padding: 0.25rem;
+  margin-bottom: 1.5rem;
+}
+
+.toggle-btn {
+  flex: 1;
+  padding: 0.5rem 1rem;
+  border: none;
+  background: transparent;
+  border-radius: 6px;
+  font-size: 0.9rem;
+  font-weight: 500;
+  color: #64748b;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s, box-shadow 0.15s;
+}
+
+.toggle-btn.active {
+  background: #ffffff;
+  color: #1e293b;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.toggle-btn:hover:not(.active) {
+  color: #334155;
+}
+
+/* Form */
+.claim-burn-form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.claim-burn-form label {
+  font-size: 0.85rem;
+  font-weight: 500;
+  color: #475569;
+}
+
+.claim-burn-form input {
+  padding: 0.65rem 0.85rem;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  font-size: 1rem;
+  color: #1e293b;
+  outline: none;
+  transition: border-color 0.15s;
+}
+
+.claim-burn-form input:focus {
+  border-color: #6366f1;
+  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.15);
+}
+
+.claim-burn-form input:disabled {
+  background: #f1f5f9;
+  color: #94a3b8;
+}
+
+/* Feedback */
+.feedback {
+  margin-top: 0.5rem;
+  padding: 0.65rem 1rem;
+  border-radius: 8px;
+  font-size: 0.85rem;
+  font-weight: 500;
+}
+
+.feedback.success {
+  background: #f0fdf4;
+  color: #15803d;
+  border: 1px solid #bbf7d0;
+}
+
+.feedback.error {
+  background: #fef2f2;
+  color: #b91c1c;
+  border: 1px solid #fecaca;
+}
+
+/* Connecting state */
+.wallet-connecting {
+  text-align: center;
+  color: #64748b;
+  font-size: 0.95rem;
+}
+
+/* Error state */
+.wallet-error {
+  text-align: center;
+}
+
+.wallet-error p {
+  color: #b91c1c;
+  margin-bottom: 1rem;
+  font-size: 0.9rem;
+}
