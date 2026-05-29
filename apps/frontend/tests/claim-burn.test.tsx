@@ -25,6 +25,14 @@ describe('ClaimBurn — wallet states', () => {
     render(<ClaimBurn walletState="connected" />);
     expect(screen.getByTestId('claim-burn-form')).toBeInTheDocument();
   });
+
+  it('displays connected wallet status', () => {
+    render(<ClaimBurn walletState="connected" />);
+    expect(screen.getByTestId('connected-msg')).toHaveTextContent(
+      'Wallet connected. Choose Claim or Burn to continue.',
+    );
+    expect(screen.getByText('Connected')).toBeInTheDocument();
+  });
 });
 
 describe('ClaimBurn — toggle', () => {
@@ -62,6 +70,23 @@ describe('ClaimBurn — submit', () => {
     await waitFor(() => expect(screen.getByTestId('success-msg')).toBeInTheDocument());
     expect(onClaim).toHaveBeenCalledWith('10');
   });
+
+  it('shows pending state while the transaction is processing', async () => {
+    let resolvePromise: () => void;
+    const promise = new Promise<void>((resolve) => {
+      resolvePromise = resolve;
+    });
+    const onClaim = vi.fn().mockReturnValue(promise);
+
+    render(<ClaimBurn walletState="connected" onClaim={onClaim} />);
+    fireEvent.change(screen.getByTestId('amount-input'), { target: { value: '7' } });
+    fireEvent.click(screen.getByTestId('submit-btn'));
+
+    expect(screen.getByTestId('submit-btn')).toHaveTextContent('Claiming…');
+    resolvePromise!();
+    await waitFor(() => expect(screen.getByTestId('success-msg')).toBeInTheDocument());
+  });
+
   it('calls onBurn with amount', async () => {
     const onBurn = vi.fn().mockResolvedValue(undefined);
     render(<ClaimBurn walletState="connected" onBurn={onBurn} />);

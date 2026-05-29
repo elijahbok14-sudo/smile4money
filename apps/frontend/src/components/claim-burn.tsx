@@ -15,6 +15,7 @@ const styles = {
   panel: {
     width: '100%',
     maxWidth: 420,
+    minWidth: 0,
     margin: '0 auto',
     padding: 24,
     borderRadius: 24,
@@ -24,12 +25,30 @@ const styles = {
     flexDirection: 'column' as const,
     gap: 18,
     fontFamily: 'Inter, system-ui, sans-serif',
+    boxSizing: 'border-box' as const,
   },
   walletPrompt: {
     margin: 0,
     fontSize: 16,
     lineHeight: 1.5,
     color: '#0f172a',
+  },
+  walletStatusRow: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
+  },
+  statusBadge: {
+    display: 'inline-flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 999,
+    padding: '8px 14px',
+    background: '#ecfdf5',
+    color: '#166534',
+    fontSize: 13,
+    fontWeight: 600,
   },
   button: {
     width: '100%',
@@ -38,6 +57,7 @@ const styles = {
     padding: '14px 18px',
     fontSize: 16,
     cursor: 'pointer',
+    transition: 'background 0.2s ease, transform 0.15s ease',
   },
   connectButton: {
     background: '#0f172a',
@@ -82,6 +102,7 @@ const styles = {
     fontSize: 16,
     color: '#0f172a',
     outline: 'none',
+    boxSizing: 'border-box' as const,
   },
   feedback: {
     fontSize: 14,
@@ -165,6 +186,13 @@ export function ClaimBurn({
 
   return (
     <div data-testid="claim-burn" style={styles.panel}>
+      <div style={styles.walletStatusRow}>
+        <p style={styles.walletPrompt} data-testid="connected-msg">
+          Wallet connected. Choose Claim or Burn to continue.
+        </p>
+        <span style={styles.statusBadge}>Connected</span>
+      </div>
+
       <div style={styles.toggleGroup} role="group" aria-label="Select action mode">
         {(['claim', 'burn'] as Mode[]).map((buttonMode) => {
           const active = mode === buttonMode;
