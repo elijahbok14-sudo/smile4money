@@ -205,6 +205,41 @@ input:disabled {
   color: #dc2626;
 }
 
+/* Confirmation overlay */
+.confirm-overlay {
+  padding: 1.5rem 1rem;
+  background: #f9fafb;
+  border-radius: 8px;
+  border: 1px solid #e5e7eb;
+  text-align: center;
+}
+
+.confirm-text {
+  font-size: 0.9375rem;
+  color: #374151;
+  margin: 0 0 1rem;
+  line-height: 1.5;
+}
+
+.confirm-text strong {
+  color: #1a1a2e;
+  font-weight: 600;
+}
+
+.confirm-buttons {
+  display: flex;
+  gap: 0.75rem;
+}
+
+.btn-cancel {
+  background: #e5e7eb;
+  color: #374151;
+}
+
+.btn-cancel:hover:not(:disabled) {
+  background: #d1d5db;
+}
+
 /* Spinner */
 .spinner {
   width: 32px;
