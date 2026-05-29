@@ -221,3 +221,40 @@ input:disabled {
     transform: rotate(360deg);
   }
 }
+
+/* Confirmation overlay */
+.confirm-overlay {
+  text-align: center;
+  padding: 1.5rem 1rem;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  background: #fafafa;
+  margin-bottom: 0.75rem;
+}
+
+.confirm-text {
+  font-size: 1rem;
+  font-weight: 600;
+  color: #1a1a2e;
+  margin: 0 0 1.25rem;
+}
+
+.btn-confirm {
+  background: #10b981;
+  color: #fff;
+  margin-bottom: 0.5rem;
+}
+
+.btn-confirm:hover:not(:disabled) {
+  background: #059669;
+}
+
+.btn-cancel {
+  background: #fff;
+  color: #666;
+  border: 1px solid #d1d5db;
+}
+
+.btn-cancel:hover:not(:disabled) {
+  background: #f3f4f6;
+}
