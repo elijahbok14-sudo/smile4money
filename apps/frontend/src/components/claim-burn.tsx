@@ -220,26 +220,30 @@ export function ClaimBurn({
     <div className={`claim-burn ${className}`.trim()} data-testid="claim-burn">
       <h2 className="claim-burn-title">Claim &amp; Burn</h2>
 
-      <div className="toggle" role="group" aria-label="Select mode">
-        <button
-          type="button"
-          className={`toggle-btn${mode === 'claim' ? ' active' : ''}`}
-          onClick={() => handleModeChange('claim')}
-          aria-pressed={mode === 'claim'}
-          data-testid="toggle-claim"
-        >
-          Claim
-        </button>
-        <button
-          type="button"
-          className={`toggle-btn${mode === 'burn' ? ' active' : ''}`}
-          onClick={() => handleModeChange('burn')}
-          aria-pressed={mode === 'burn'}
-          data-testid="toggle-burn"
-        >
-          Burn
-        </button>
+    return (
+      <>
+        {/* Toggle */}
+        <div className="toggle" role="group" aria-label="Select mode">
+          <button
+            type="button"
+            className={`toggle-btn${mode === 'claim' ? ' active' : ''}`}
+            onClick={() => handleModeChange('claim')}
+            aria-pressed={mode === 'claim'}
+            data-testid="toggle-claim"
+          >
+            Claim
+          </button>
+          <button
+            className="btn btn-connect"
+            onClick={onConnect}
+            data-testid="retry-connect-btn"
+          >
+            Try Again
+          </button>
+        </div>
       </div>
+    );
+  }
 
       {connectedAddress && (
         <div className="wallet-info" data-testid="wallet-info">
@@ -304,37 +308,11 @@ export function ClaimBurn({
             </button>
           </div>
         </div>
-      ) : (
-        <form onSubmit={handleRequestSubmit} data-testid="claim-burn-form">
-          <label htmlFor="amount">Amount (XLM)</label>
-          <div className="input-row">
-            <input
-              id="amount"
-              type="number"
-              min="0"
-              step="any"
-              value={amount}
-              onChange={handleAmountChange}
-              placeholder="0.00"
-              disabled={isPending}
-              data-testid="amount-input"
-            />
-            {mode === 'burn' && walletBalance !== null && walletBalance !== undefined && (
-              <button
-                type="button"
-                className="btn-max"
-                onClick={handleMax}
-                disabled={isPending}
-                data-testid="max-btn"
-              >
-                Max
-              </button>
-            )}
-          </div>
+        {!showConfirm && (
           <button
             type="submit"
             className={`btn btn-${mode}`}
-            disabled={isPending || !valid}
+            disabled={isPending || !isValidAmount(amount)}
             data-testid="submit-btn"
           >
             {isPending
@@ -345,30 +323,13 @@ export function ClaimBurn({
               ? 'Claim'
               : 'Burn'}
           </button>
-        </form>
-      )}
+        )}
+      </form>
 
-      <div aria-live="polite" aria-atomic="true">
-        {phase === 'success' && (
-          <div className="feedback success" role="status" data-testid="success-msg">
-            <p>
-              {mode === 'claim'
-                ? 'XLM claimed successfully!'
-                : 'XLM burned successfully!'}
-            </p>
-            {txHash && (
-              <p className="tx-hash" data-testid="tx-hash">
-                TX: {txHash.slice(0, 8)}&hellip;{txHash.slice(-6)}
-              </p>
-            )}
-          </div>
-        )}
-        {phase === 'error' && (
-          <p className="feedback error" role="alert" data-testid="error-msg">
-            {errorMsg}
-          </p>
-        )}
-      </div>
+  return (
+    <div className={`claim-burn ${className}`.trim()} data-testid="claim-burn">
+      <h2 className="claim-burn-title">Claim &amp; Burn</h2>
+      {stateMap[stateKey] ?? renderDisconnected()}
     </div>
   );
 }
