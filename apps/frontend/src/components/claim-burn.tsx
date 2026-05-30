@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import '../styles/claim-burn.css';
 
 type Mode = 'claim' | 'burn';
@@ -22,6 +22,22 @@ function isValidAmount(value: string): boolean {
   return value.trim() !== '' && !isNaN(n) && n > 0;
 }
 
+function useCopyToClipboard(timeoutMs = 2000) {
+  const [copiedKey, setCopiedKey] = useState<string | null>(null);
+
+  const copy = useCallback(async (text: string, key: string) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopiedKey(key);
+      setTimeout(() => setCopiedKey(null), timeoutMs);
+    } catch {
+      // clipboard not available
+    }
+  }, [timeoutMs]);
+
+  return { copiedKey, copy };
+}
+
 export function ClaimBurn({
   walletState,
   onConnect,
@@ -39,6 +55,7 @@ export function ClaimBurn({
   const [status, setStatus] = useState<Status>('idle');
   const [errorMsg, setErrorMsg] = useState('');
   const [txHash, setTxHash] = useState<string | null>(null);
+  const { copiedKey, copy } = useCopyToClipboard();
 
   useEffect(() => {
     if (status === 'success') {
@@ -211,9 +228,16 @@ export function ClaimBurn({
         <div className="wallet-info" data-testid="wallet-info">
           <div className="wallet-info-row">
             <span className="wallet-info-label">Connected</span>
-            <span className="wallet-info-address">
+            <button
+              type="button"
+              className="wallet-info-address btn-copy"
+              onClick={() => copy(publicKey, 'address')}
+              title="Copy full address"
+              data-testid="copy-address-btn"
+            >
               {publicKey.slice(0, 4)}&hellip;{publicKey.slice(-4)}
-            </span>
+              <span className="copy-indicator">{copiedKey === 'address' ? ' Copied!' : ' Copy'}</span>
+            </button>
             {onDisconnect && (
               <button className="btn-disconnect" onClick={onDisconnect} data-testid="disconnect-btn">
                 Disconnect
@@ -316,7 +340,18 @@ export function ClaimBurn({
       {status === 'success' && (
         <p className="feedback success" role="status" data-testid="success-msg">
           {mode === 'claim' ? 'XLM claimed successfully!' : 'XLM burned successfully!'}
-          {txHash && <span className="tx-hash">{txHash}</span>}
+          {txHash && (
+            <button
+              type="button"
+              className="tx-hash btn-copy"
+              onClick={() => copy(txHash, 'txhash')}
+              title="Copy transaction hash"
+              data-testid="copy-txhash-btn"
+            >
+              {txHash.slice(0, 8)}&hellip;{txHash.slice(-8)}
+              <span className="copy-indicator">{copiedKey === 'txhash' ? ' Copied!' : ' Copy'}</span>
+            </button>
+          )}
         </p>
       )}
       {status === 'error' && (
