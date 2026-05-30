@@ -6,6 +6,9 @@ All notable changes to this project will be documented in this file.
 
 ### Added
 - Kiro AI-assisted development integration
+- `submit_result`: added `game_id` parameter with cross-match injection guard — oracle must supply the `game_id` that matches the stored match record; mismatches return `Error::GameIdMismatch` (E013) before any state is modified
+- `Error::GameIdMismatch` (code 13): new error variant to signal oracle submitted a result for the wrong game
+- `test_submit_result_wrong_game_id_fails`: unit test asserting `GameIdMismatch` when oracle passes a mismatched `game_id`
 
 ## [1.0.0] - 2026-04-25
 

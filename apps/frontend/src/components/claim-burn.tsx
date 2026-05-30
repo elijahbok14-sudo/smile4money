@@ -1,163 +1,329 @@
-'use client'
+import React, { useState, useEffect } from 'react';
+import '../styles/claim-burn.css';
 
-import { useState } from 'react'
-
-type Mode = 'claim' | 'burn'
-type WalletState = 'disconnected' | 'connecting' | 'connected'
+type Mode = 'claim' | 'burn';
+type Status = 'idle' | 'confirm' | 'pending' | 'success' | 'error';
 
 interface ClaimBurnProps {
-  /** Token symbol shown in the UI, e.g. "XLM" */
-  tokenSymbol?: string
-  /** Available balance when wallet is connected */
-  balance?: string
+  walletState: string;
+  onConnect?: () => void;
+  onClaim?: (amount: string) => Promise<string | void>;
+  onBurn?: (amount: string) => Promise<string | void>;
+  onSwitchNetwork?: () => void;
+  onDisconnect?: () => void;
+  onRefreshBalance?: () => void;
+  publicKey?: string | null;
+  balance?: string | null;
+  expectedNetwork?: string;
 }
 
-export function ClaimBurn({ tokenSymbol = 'XLM', balance = '0.00' }: ClaimBurnProps) {
-  const [mode, setMode] = useState<Mode>('claim')
-  const [walletState, setWalletState] = useState<WalletState>('disconnected')
-  const [amount, setAmount] = useState('')
-  const [txStatus, setTxStatus] = useState<'idle' | 'pending' | 'success' | 'error'>('idle')
+function isValidAmount(value: string): boolean {
+  const n = Number(value);
+  return value.trim() !== '' && !isNaN(n) && n > 0;
+}
 
-  async function connectWallet() {
-    setWalletState('connecting')
-    // Simulate wallet handshake — replace with real Freighter/Albedo SDK call
-    await new Promise((r) => setTimeout(r, 1000))
-    setWalletState('connected')
+export function ClaimBurn({
+  walletState,
+  onConnect,
+  onClaim,
+  onBurn,
+  onSwitchNetwork,
+  onDisconnect,
+  onRefreshBalance,
+  publicKey,
+  balance,
+  expectedNetwork = 'testnet',
+}: ClaimBurnProps) {
+  const [mode, setMode] = useState<Mode>('claim');
+  const [amount, setAmount] = useState('');
+  const [status, setStatus] = useState<Status>('idle');
+  const [errorMsg, setErrorMsg] = useState('');
+  const [txHash, setTxHash] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (status === 'success') {
+      const timer = setTimeout(() => setStatus('idle'), 3000);
+      return () => clearTimeout(timer);
+    }
+  }, [status]);
+
+  function resetFeedback() {
+    setStatus('idle');
+    setTxHash(null);
+    setErrorMsg('');
   }
 
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault()
-    if (!amount || Number(amount) <= 0) return
-    setTxStatus('pending')
-    // Simulate on-chain tx — replace with Soroban contract call
-    await new Promise((r) => setTimeout(r, 1500))
-    setTxStatus('success')
-    setAmount('')
-    setTimeout(() => setTxStatus('idle'), 3000)
+  function handleToggle(newMode: Mode) {
+    setMode(newMode);
+    resetFeedback();
   }
 
-  const isBurn = mode === 'burn'
+  function handleAmountChange(e: React.ChangeEvent<HTMLInputElement>) {
+    setAmount(e.target.value);
+    if (status === 'error' || status === 'success') {
+      resetFeedback();
+    }
+  }
+
+  function handleMax() {
+    if (balance != null) {
+      setAmount(balance);
+      resetFeedback();
+    }
+  }
+
+  function handleRequestSubmit(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    if (!isValidAmount(amount)) return;
+    setStatus('confirm');
+  }
+
+  async function handleConfirm() {
+    setStatus('pending');
+    setErrorMsg('');
+    setTxHash(null);
+    try {
+      const action = mode === 'claim' ? onClaim : onBurn;
+      const hash = await action?.(amount);
+      if (hash) setTxHash(hash);
+      setStatus('success');
+      setAmount('');
+    } catch (err) {
+      setStatus('error');
+      setErrorMsg(err instanceof Error ? err.message : 'Transaction failed');
+    }
+  }
+
+  function handleCancel() {
+    setStatus('idle');
+  }
+
+  // ── Wallet state screens ──────────────────────────────────────────
+
+  if (walletState === 'checking' || walletState === 'connecting') {
+    return (
+      <div className="wallet-state" data-testid="wallet-connecting">
+        <div className="spinner" />
+        <p className="wallet-state-message">Connecting to Freighter&hellip;</p>
+      </div>
+    );
+  }
+
+  if (walletState === 'notInstalled') {
+    return (
+      <div className="wallet-state" data-testid="wallet-not-installed">
+        <span className="wallet-state-icon">⚠️</span>
+        <h3 className="wallet-state-title">Freighter Not Found</h3>
+        <p className="wallet-state-message">
+          Please install the{' '}
+          <a href="https://freighter.app" target="_blank" rel="noopener noreferrer">
+            Freighter wallet extension
+          </a>{' '}
+          to continue.
+        </p>
+      </div>
+    );
+  }
+
+  if (walletState === 'disconnected') {
+    return (
+      <div className="wallet-state" data-testid="wallet-disconnected">
+        <span className="wallet-state-icon">💼</span>
+        <h3 className="wallet-state-title">Connect Your Wallet</h3>
+        <p className="wallet-state-message">
+          Connect your Freighter wallet to claim rewards or burn tokens.
+        </p>
+        <button className="btn btn-connect" onClick={onConnect} data-testid="connect-wallet-btn">
+          Connect Wallet
+        </button>
+      </div>
+    );
+  }
+
+  if (walletState === 'wrongNetwork') {
+    return (
+      <div className="wallet-state" data-testid="wallet-wrong-network">
+        <span className="wallet-state-icon">🌐</span>
+        <h3 className="wallet-state-title">Wrong Network</h3>
+        <p className="wallet-state-message">
+          Please switch your Freighter wallet to <strong>{expectedNetwork}</strong>.
+        </p>
+        <button
+          className="btn btn-switch-network"
+          onClick={onSwitchNetwork}
+          data-testid="switch-network-btn"
+        >
+          Switch to {expectedNetwork}
+        </button>
+      </div>
+    );
+  }
+
+  if (walletState === 'error') {
+    return (
+      <div className="wallet-state" data-testid="wallet-error">
+        <span className="wallet-state-icon">⚠️</span>
+        <h3 className="wallet-state-title">Connection Error</h3>
+        <p className="wallet-state-message">
+          An error occurred while connecting to your wallet.
+        </p>
+        <button className="btn btn-connect" onClick={onConnect} data-testid="retry-connect-btn">
+          Try Again
+        </button>
+      </div>
+    );
+  }
+
+  // ── Connected UI ──────────────────────────────────────────────────
+
+  const isPending = status === 'pending';
+  const showConfirm = status === 'confirm';
+  const valid = isValidAmount(amount);
 
   return (
-    <div className="w-full max-w-md mx-auto rounded-2xl bg-gray-900 border border-gray-800 shadow-xl overflow-hidden">
+    <div className="claim-burn" data-testid="claim-burn">
+      <h2 className="claim-burn-title">Claim &amp; Burn</h2>
+
       {/* Toggle */}
-      <div className="flex">
+      <div className="toggle" role="group" aria-label="Select mode">
         <button
-          onClick={() => { setMode('claim'); setTxStatus('idle') }}
-          className={`flex-1 py-3 text-sm font-semibold transition-colors ${
-            !isBurn
-              ? 'bg-emerald-600 text-white'
-              : 'bg-gray-800 text-gray-400 hover:text-white'
-          }`}
+          type="button"
+          className={`toggle-btn${mode === 'claim' ? ' active' : ''}`}
+          onClick={() => handleToggle('claim')}
+          aria-pressed={mode === 'claim'}
+          data-testid="toggle-claim"
         >
           Claim
         </button>
         <button
-          onClick={() => { setMode('burn'); setTxStatus('idle') }}
-          className={`flex-1 py-3 text-sm font-semibold transition-colors ${
-            isBurn
-              ? 'bg-red-600 text-white'
-              : 'bg-gray-800 text-gray-400 hover:text-white'
-          }`}
+          type="button"
+          className={`toggle-btn${mode === 'burn' ? ' active' : ''}`}
+          onClick={() => handleToggle('burn')}
+          aria-pressed={mode === 'burn'}
+          data-testid="toggle-burn"
         >
           Burn
         </button>
       </div>
 
-      <div className="p-6 space-y-5">
-        {/* Header */}
-        <div>
-          <h2 className="text-lg font-bold">
-            {isBurn ? `Burn ${tokenSymbol}` : `Claim ${tokenSymbol}`}
-          </h2>
-          <p className="text-xs text-gray-400 mt-1">
-            {isBurn
-              ? 'Permanently remove tokens from circulation.'
-              : 'Claim your winnings from the escrow contract.'}
+      {/* Wallet info */}
+      {publicKey && (
+        <div className="wallet-info" data-testid="wallet-info">
+          <div className="wallet-info-row">
+            <span className="wallet-info-label">Connected</span>
+            <span className="wallet-info-address">
+              {publicKey.slice(0, 4)}&hellip;{publicKey.slice(-4)}
+            </span>
+            {onDisconnect && (
+              <button className="btn-disconnect" onClick={onDisconnect} data-testid="disconnect-btn">
+                Disconnect
+              </button>
+            )}
+          </div>
+          {balance != null && (
+            <div className="wallet-balance-row">
+              <span className="wallet-balance-label">Balance</span>
+              <span className="wallet-balance-value" data-testid="wallet-balance">
+                {balance} XLM
+              </span>
+              {onRefreshBalance && (
+                <button
+                  className="btn-refresh-balance"
+                  onClick={onRefreshBalance}
+                  data-testid="refresh-balance-btn"
+                  title="Refresh balance"
+                >
+                  ↻
+                </button>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Confirmation overlay */}
+      {showConfirm && (
+        <div className="confirm-overlay" data-testid="confirm-overlay">
+          <p className="confirm-text">
+            {mode === 'claim' ? 'Claim' : 'Burn'} <strong>{amount}</strong> XLM?
           </p>
+          <div className="confirm-buttons">
+            <button
+              type="button"
+              className="btn btn-cancel"
+              onClick={handleCancel}
+              data-testid="cancel-btn"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              className={`btn btn-${mode}`}
+              onClick={handleConfirm}
+              data-testid="confirm-btn"
+            >
+              Confirm
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Form */}
+      <form onSubmit={handleRequestSubmit} data-testid="claim-burn-form">
+        <div className="form-group">
+          <label htmlFor="amount-input">Amount (XLM)</label>
+          <div className="input-row">
+            <input
+              id="amount-input"
+              type="number"
+              min="0"
+              step="any"
+              value={amount}
+              onChange={handleAmountChange}
+              disabled={isPending}
+              placeholder="0.00"
+              data-testid="amount-input"
+            />
+            {mode === 'burn' && balance != null && (
+              <button
+                type="button"
+                className="btn-max"
+                onClick={handleMax}
+                disabled={isPending}
+                data-testid="max-btn"
+              >
+                Max
+              </button>
+            )}
+          </div>
         </div>
 
-        {/* Wallet disconnected */}
-        {walletState === 'disconnected' && (
+        {!showConfirm && (
           <button
-            onClick={connectWallet}
-            className="w-full py-3 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-sm font-semibold transition-colors"
+            type="submit"
+            className={`btn btn-${mode}`}
+            disabled={isPending || !valid}
+            data-testid="submit-btn"
           >
-            Connect Wallet
+            {isPending
+              ? mode === 'claim' ? 'Claiming…' : 'Burning…'
+              : mode === 'claim' ? 'Claim' : 'Burn'}
           </button>
         )}
+      </form>
 
-        {/* Wallet connecting */}
-        {walletState === 'connecting' && (
-          <div className="flex items-center justify-center gap-2 py-3 text-sm text-gray-400">
-            <span className="h-4 w-4 rounded-full border-2 border-indigo-400 border-t-transparent animate-spin" />
-            Connecting…
-          </div>
-        )}
-
-        {/* Wallet connected */}
-        {walletState === 'connected' && (
-          <form onSubmit={handleSubmit} className="space-y-4">
-            {/* Balance */}
-            <div className="flex justify-between text-xs text-gray-400">
-              <span>Available</span>
-              <span className="font-mono text-white">
-                {balance} {tokenSymbol}
-              </span>
-            </div>
-
-            {/* Amount input */}
-            <div className="relative">
-              <input
-                type="number"
-                min="0"
-                step="any"
-                placeholder="0.00"
-                value={amount}
-                onChange={(e) => setAmount(e.target.value)}
-                className="w-full bg-gray-800 border border-gray-700 rounded-xl px-4 py-3 pr-16 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-indigo-500 placeholder-gray-600"
-              />
-              <span className="absolute right-4 top-1/2 -translate-y-1/2 text-xs text-gray-400 font-semibold">
-                {tokenSymbol}
-              </span>
-            </div>
-
-            {/* Submit */}
-            <button
-              type="submit"
-              disabled={txStatus === 'pending' || !amount}
-              className={`w-full py-3 rounded-xl text-sm font-semibold transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
-                isBurn
-                  ? 'bg-red-600 hover:bg-red-500'
-                  : 'bg-emerald-600 hover:bg-emerald-500'
-              }`}
-            >
-              {txStatus === 'pending' ? (
-                <span className="flex items-center justify-center gap-2">
-                  <span className="h-4 w-4 rounded-full border-2 border-white border-t-transparent animate-spin" />
-                  {isBurn ? 'Burning…' : 'Claiming…'}
-                </span>
-              ) : isBurn ? (
-                'Burn Tokens'
-              ) : (
-                'Claim Winnings'
-              )}
-            </button>
-          </form>
-        )}
-
-        {/* Tx feedback */}
-        {txStatus === 'success' && (
-          <div className="rounded-xl bg-emerald-900/40 border border-emerald-700 px-4 py-3 text-sm text-emerald-300">
-            ✓ Transaction submitted successfully.
-          </div>
-        )}
-        {txStatus === 'error' && (
-          <div className="rounded-xl bg-red-900/40 border border-red-700 px-4 py-3 text-sm text-red-300">
-            ✗ Transaction failed. Please try again.
-          </div>
-        )}
-      </div>
+      {/* Feedback */}
+      {status === 'success' && (
+        <p className="feedback success" role="status" data-testid="success-msg">
+          {mode === 'claim' ? 'XLM claimed successfully!' : 'XLM burned successfully!'}
+          {txHash && <span className="tx-hash">{txHash}</span>}
+        </p>
+      )}
+      {status === 'error' && (
+        <p className="feedback error" role="alert" data-testid="error-msg">
+          {errorMsg}
+        </p>
+      )}
     </div>
-  )
+  );
 }

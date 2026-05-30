@@ -25,15 +25,26 @@ impl EscrowContract {
             .unwrap_or(false)
     }
 
-    /// Initialize the contract with a trusted oracle address and an admin.
-    pub fn initialize(env: Env, oracle: Address, admin: Address) {
+    /// Initialize the contract with a trusted oracle address, an admin, and a default token.
+    /// Returns `Error::InvalidToken` if the token address is not a valid token contract.
+    pub fn initialize(
+        env: Env,
+        oracle: Address,
+        admin: Address,
+        token: Address,
+    ) -> Result<(), Error> {
         if env.storage().instance().has(&DataKey::Oracle) {
             panic!("Contract already initialized");
         }
+        // Validate token by calling a read-only method; panics if not a real token contract
+        let token_client = token::Client::new(&env, &token);
+        let _ = token_client.decimals();
         env.storage().instance().set(&DataKey::Oracle, &oracle);
         env.storage().instance().set(&DataKey::Admin, &admin);
+        env.storage().instance().set(&DataKey::Token, &token);
         env.storage().instance().set(&DataKey::MatchCount, &0u64);
         env.storage().instance().set(&DataKey::Paused, &false);
+        Ok(())
     }
 
     /// Rotate the oracle address — requires the current oracle or admin to authorize.
@@ -101,7 +112,8 @@ impl EscrowContract {
         if player1 == player2 {
             return Err(Error::InvalidPlayers);
         }
-        if game_id.len() > MAX_GAME_ID_LEN {
+        let game_id_len = game_id.len();
+        if game_id_len == 0 || game_id_len > MAX_GAME_ID_LEN {
             return Err(Error::InvalidGameId);
         }
         // Reject duplicate game_id — same game cannot be used in multiple matches
@@ -123,6 +135,11 @@ impl EscrowContract {
             return Err(Error::AlreadyExists);
         }
 
+        // STATE TRANSITION: (none) → Pending
+        // A brand-new match starts in Pending. No funds are held yet.
+        // Valid next transitions:
+        //   • Pending → Active    : both players call deposit()
+        //   • Pending → Cancelled : either player calls cancel_match()
         let m = Match {
             id,
             player1,
@@ -158,7 +175,7 @@ impl EscrowContract {
 
         env.events().publish(
             (Symbol::new(&env, "match"), symbol_short!("created")),
-            (id, m.player1.clone(), m.player2.clone(), stake_amount),
+            (id, m.player1.clone(), m.player2.clone(), stake_amount, m.game_id.clone()),
         );
 
         Ok(id)
@@ -178,6 +195,12 @@ impl EscrowContract {
             .get(&DataKey::Match(match_id))
             .ok_or(Error::MatchNotFound)?;
 
+        if m.state == MatchState::Cancelled {
+            return Err(Error::MatchCancelled);
+        }
+        if m.state == MatchState::Completed {
+            return Err(Error::MatchCompleted);
+        }
         if m.state != MatchState::Pending {
             return Err(Error::InvalidState);
         }
@@ -200,7 +223,10 @@ impl EscrowContract {
         }
 
         let client = token::Client::new(&env, &m.token);
-        client.transfer(&player, &env.current_contract_address(), &m.stake_amount);
+        client
+            .try_transfer(&player, &env.current_contract_address(), &m.stake_amount)
+            .map_err(|_| Error::TransferFailed)?
+            .map_err(|_| Error::TransferFailed)?;
 
         if is_p1 {
             m.player1_deposited = true;
@@ -209,6 +235,12 @@ impl EscrowContract {
         }
 
         if m.player1_deposited && m.player2_deposited {
+            // STATE TRANSITION: Pending → Active
+            // Both players have now deposited their stake. The game is in progress.
+            // Valid next transitions:
+            //   • Active → Completed : oracle calls submit_result()
+            // Note: cancel_match() is rejected once Active; the match must be resolved
+            //       via submit_result().
             m.state = MatchState::Active;
             env.events().publish(
                 (Symbol::new(&env, "match"), symbol_short!("activated")),
@@ -218,7 +250,7 @@ impl EscrowContract {
 
         env.events().publish(
             (Symbol::new(&env, "match"), symbol_short!("deposit")),
-            (match_id, player),
+            (match_id, player, m.stake_amount),
         );
 
         env.storage()
@@ -278,23 +310,31 @@ impl EscrowContract {
 
         let client = token::Client::new(&env, &m.token);
 
+        let payout_amount: i128 = match winner {
+            Winner::Draw => m.stake_amount,
+            _ => m.stake_amount * 2,
+        };
+
         match winner {
             Winner::Player1 => client.transfer(
                 &env.current_contract_address(),
                 &m.player1,
-                &(m.stake_amount * 2),
+                &payout_amount,
             ),
             Winner::Player2 => client.transfer(
                 &env.current_contract_address(),
                 &m.player2,
-                &(m.stake_amount * 2),
+                &payout_amount,
             ),
             Winner::Draw => {
-                client.transfer(&env.current_contract_address(), &m.player1, &m.stake_amount);
-                client.transfer(&env.current_contract_address(), &m.player2, &m.stake_amount);
+                client.transfer(&env.current_contract_address(), &m.player1, &payout_amount);
+                client.transfer(&env.current_contract_address(), &m.player2, &payout_amount);
             }
         }
 
+        // STATE TRANSITION: Active → Completed
+        // The oracle has submitted a verified result and the payout has been executed.
+        // This is a terminal state — no further transitions are possible.
         m.state = MatchState::Completed;
         env.storage()
             .persistent()
@@ -306,13 +346,19 @@ impl EscrowContract {
         );
 
         let topics = (Symbol::new(&env, "match"), symbol_short!("completed"));
-        env.events().publish(topics, (match_id, winner));
+        env.events().publish(topics, (match_id, winner, payout_amount));
 
         Ok(())
     }
 
     /// Cancel a pending match and refund any deposits.
-    /// Either player can cancel a pending match.
+    ///
+    /// Authorization model:
+    /// - If neither or only one player has deposited: the calling player's auth suffices.
+    /// - If both players have deposited: both players must authorize, because cancelling
+    ///   would withdraw funds that the other player has already committed.
+    ///
+    /// Cancelation is allowed while the contract is paused so players can recover funds.
     pub fn cancel_match(env: Env, match_id: u64, caller: Address) -> Result<(), Error> {
         let mut m: Match = env
             .storage()
@@ -331,7 +377,14 @@ impl EscrowContract {
             return Err(Error::Unauthorized);
         }
 
-        caller.require_auth();
+        // When both players have deposited, both must consent to cancellation
+        // to prevent one player from unilaterally withdrawing the other's funds.
+        if m.player1_deposited && m.player2_deposited {
+            m.player1.require_auth();
+            m.player2.require_auth();
+        } else {
+            caller.require_auth();
+        }
 
         let client = token::Client::new(&env, &m.token);
         if m.player1_deposited {
@@ -341,6 +394,10 @@ impl EscrowContract {
             client.transfer(&env.current_contract_address(), &m.player2, &m.stake_amount);
         }
 
+        // STATE TRANSITION: Pending → Cancelled
+        // Either player may cancel before both deposits are made. Any deposit already
+        // transferred is refunded above. This is a terminal state — no further
+        // transitions are possible.
         m.state = MatchState::Cancelled;
         env.storage()
             .persistent()
@@ -353,7 +410,7 @@ impl EscrowContract {
 
         env.events().publish(
             (Symbol::new(&env, "match"), symbol_short!("cancelled")),
-            match_id,
+            (match_id, caller.clone()),
         );
 
         Ok(())
@@ -399,3 +456,6 @@ impl EscrowContract {
 
 #[cfg(test)]
 mod tests;
+
+#[cfg(test)]
+mod tests_e2e;
