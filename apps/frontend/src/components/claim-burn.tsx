@@ -15,6 +15,7 @@ interface ClaimBurnProps {
   publicKey?: string | null;
   balance?: string | null;
   expectedNetwork?: string;
+  tokenSymbol?: string;
 }
 
 function isValidAmount(value: string): boolean {
@@ -33,6 +34,7 @@ export function ClaimBurn({
   publicKey,
   balance,
   expectedNetwork = 'testnet',
+  tokenSymbol = 'XLM',
 }: ClaimBurnProps) {
   const [mode, setMode] = useState<Mode>('claim');
   const [amount, setAmount] = useState('');
@@ -224,7 +226,7 @@ export function ClaimBurn({
             <div className="wallet-balance-row">
               <span className="wallet-balance-label">Balance</span>
               <span className="wallet-balance-value" data-testid="wallet-balance">
-                {balance} XLM
+                {balance} {tokenSymbol}
               </span>
               {onRefreshBalance && (
                 <button
@@ -245,7 +247,7 @@ export function ClaimBurn({
       {showConfirm && (
         <div className="confirm-overlay" data-testid="confirm-overlay">
           <p className="confirm-text">
-            {mode === 'claim' ? 'Claim' : 'Burn'} <strong>{amount}</strong> XLM?
+            {mode === 'claim' ? 'Claim' : 'Burn'} <strong>{amount}</strong> {tokenSymbol}?
           </p>
           <div className="confirm-buttons">
             <button
@@ -271,7 +273,7 @@ export function ClaimBurn({
       {/* Form */}
       <form onSubmit={handleRequestSubmit} data-testid="claim-burn-form">
         <div className="form-group">
-          <label htmlFor="amount-input">Amount (XLM)</label>
+          <label htmlFor="amount-input">Amount ({tokenSymbol})</label>
           <div className="input-row">
             <input
               id="amount-input"
@@ -315,7 +317,9 @@ export function ClaimBurn({
       {/* Feedback */}
       {status === 'success' && (
         <p className="feedback success" role="status" data-testid="success-msg">
-          {mode === 'claim' ? 'XLM claimed successfully!' : 'XLM burned successfully!'}
+          {mode === 'claim'
+            ? `${tokenSymbol} claimed successfully!`
+            : `${tokenSymbol} burned successfully!`}
           {txHash && <span className="tx-hash">{txHash}</span>}
         </p>
       )}
