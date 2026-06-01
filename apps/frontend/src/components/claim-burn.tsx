@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import '../styles/claim-burn.css';
+import './claim-burn.css';
 
 type Mode = 'claim' | 'burn';
 type Status = 'idle' | 'confirm' | 'pending' | 'success' | 'error';
