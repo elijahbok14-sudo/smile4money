@@ -26,9 +26,20 @@ interface ClaimBurnProps {
   theme?: Theme;
 }
 
-function isValidAmount(value: string): boolean {
-  const n = Number(value);
-  return value.trim() !== '' && !isNaN(n) && n > 0;
+function StatusBadge({ walletState }: { walletState: WalletState }) {
+  const config: Record<WalletState, { label: string; color: string; dot: string }> = {
+    disconnected: { label: "Wallet Disconnected", color: "text-white/40",    dot: "bg-white/20" },
+    connecting:   { label: "Connecting…",          color: "text-amber-400",   dot: "bg-amber-400 animate-pulse" },
+    connected:    { label: "Wallet Connected",      color: "text-emerald-400", dot: "bg-emerald-400" },
+    processing:   { label: "Processing…",           color: "text-sky-400",    dot: "bg-sky-400 animate-pulse" },
+  };
+  const { label, color, dot } = config[walletState];
+  return (
+    <div className={`flex items-center gap-2 text-xs font-medium ${color}`} aria-live="polite">
+      <span className={`w-2 h-2 rounded-full ${dot}`} aria-hidden="true" />
+      {label}
+    </div>
+  );
 }
 
 function useCopyToClipboard(timeoutMs = 2000) {
