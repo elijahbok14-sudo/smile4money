@@ -3,6 +3,7 @@ import '../styles/claim-burn.css';
 
 type Mode = 'claim' | 'burn';
 type Status = 'idle' | 'confirm' | 'pending' | 'success' | 'error';
+type Theme = 'light' | 'dark' | 'system';
 
 interface ClaimBurnProps {
   walletState: string;
@@ -15,6 +16,7 @@ interface ClaimBurnProps {
   publicKey?: string | null;
   balance?: string | null;
   expectedNetwork?: string;
+  theme?: Theme;
 }
 
 function isValidAmount(value: string): boolean {
@@ -49,7 +51,9 @@ export function ClaimBurn({
   publicKey,
   balance,
   expectedNetwork = 'testnet',
+  theme = 'system',
 }: ClaimBurnProps) {
+  const resolvedTheme = useResolvedTheme(theme);
   const [mode, setMode] = useState<Mode>('claim');
   const [amount, setAmount] = useState('');
   const [status, setStatus] = useState<Status>('idle');
@@ -115,11 +119,13 @@ export function ClaimBurn({
     setStatus('idle');
   }
 
+  const themeClass = `theme-${resolvedTheme}`;
+
   // ── Wallet state screens ──────────────────────────────────────────
 
   if (walletState === 'checking' || walletState === 'connecting') {
     return (
-      <div className="wallet-state" data-testid="wallet-connecting">
+      <div className={`wallet-state ${themeClass}`} data-testid="wallet-connecting">
         <div className="spinner" />
         <p className="wallet-state-message">Connecting to Freighter&hellip;</p>
       </div>
@@ -128,7 +134,7 @@ export function ClaimBurn({
 
   if (walletState === 'notInstalled') {
     return (
-      <div className="wallet-state" data-testid="wallet-not-installed">
+      <div className={`wallet-state ${themeClass}`} data-testid="wallet-not-installed">
         <span className="wallet-state-icon">⚠️</span>
         <h3 className="wallet-state-title">Freighter Not Found</h3>
         <p className="wallet-state-message">
@@ -144,7 +150,7 @@ export function ClaimBurn({
 
   if (walletState === 'disconnected') {
     return (
-      <div className="wallet-state" data-testid="wallet-disconnected">
+      <div className={`wallet-state ${themeClass}`} data-testid="wallet-disconnected">
         <span className="wallet-state-icon">💼</span>
         <h3 className="wallet-state-title">Connect Your Wallet</h3>
         <p className="wallet-state-message">
@@ -159,7 +165,7 @@ export function ClaimBurn({
 
   if (walletState === 'wrongNetwork') {
     return (
-      <div className="wallet-state" data-testid="wallet-wrong-network">
+      <div className={`wallet-state ${themeClass}`} data-testid="wallet-wrong-network">
         <span className="wallet-state-icon">🌐</span>
         <h3 className="wallet-state-title">Wrong Network</h3>
         <p className="wallet-state-message">
@@ -178,7 +184,7 @@ export function ClaimBurn({
 
   if (walletState === 'error') {
     return (
-      <div className="wallet-state" data-testid="wallet-error">
+      <div className={`wallet-state ${themeClass}`} data-testid="wallet-error">
         <span className="wallet-state-icon">⚠️</span>
         <h3 className="wallet-state-title">Connection Error</h3>
         <p className="wallet-state-message">
@@ -198,7 +204,7 @@ export function ClaimBurn({
   const valid = isValidAmount(amount);
 
   return (
-    <div className="claim-burn" data-testid="claim-burn">
+    <div className={`claim-burn ${themeClass}`} data-testid="claim-burn" data-theme={resolvedTheme}>
       <h2 className="claim-burn-title">Claim &amp; Burn</h2>
 
       {/* Toggle */}
