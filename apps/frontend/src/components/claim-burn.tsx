@@ -1,11 +1,19 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import '../styles/claim-burn.css';
+import type { WalletStatus } from '../types';
 
 type Mode = 'claim' | 'burn';
 type Status = 'idle' | 'confirm' | 'pending' | 'success' | 'error';
 
-export interface ClaimBurnProps {
-  walletState: string;
+interface TxRecord {
+  mode: Mode;
+  amount: string;
+  hash: string | null;
+  timestamp: number;
+}
+
+interface ClaimBurnProps {
+  walletState: WalletStatus;
   onConnect?: () => void;
   onClaim?: (amount: string) => Promise<string | void>;
   onBurn?: (amount: string) => Promise<string | void>;
