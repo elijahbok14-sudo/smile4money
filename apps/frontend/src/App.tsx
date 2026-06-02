@@ -1,6 +1,5 @@
 import { ClaimBurn } from './components/claim-burn';
 import { useStellarWallet } from './hooks/useStellarWallet';
-import type { WalletStatus } from './types';
 
 export function App() {
   const { status, address, balance, network, connect, disconnect, refreshBalance } = useStellarWallet();
@@ -28,6 +27,8 @@ export function App() {
         onRefreshBalance={refreshBalance}
         onClaim={handleClaim}
         onBurn={handleBurn}
+        onDisconnect={disconnect}
+        onRefreshBalance={refreshBalance}
         publicKey={address}
         balance={balance}
         expectedNetwork="testnet"
