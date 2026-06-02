@@ -11,10 +11,12 @@ export function App() {
   ) as WalletStatus;
 
   const handleClaim = async (amount: string): Promise<string | void> => {
+    // TODO: submit claim transaction via Stellar SDK
     console.info('Claim request', amount);
   };
 
   const handleBurn = async (amount: string): Promise<string | void> => {
+    // TODO: submit burn transaction via Stellar SDK
     console.info('Burn request', amount);
   };
 
