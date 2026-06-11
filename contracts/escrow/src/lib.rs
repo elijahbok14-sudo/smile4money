@@ -275,7 +275,8 @@ impl EscrowContract {
     }
 
     /// Oracle submits the verified match result and triggers payout.
-    /// `game_id` must match the game_id stored in the match to prevent cross-match result injection.
+    /// `game_id` must match the game_id stored in the match to prevent
+    /// cross-match result injection.
     pub fn submit_result(
         env: Env,
         match_id: u64,

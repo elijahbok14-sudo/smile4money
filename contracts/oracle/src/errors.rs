@@ -39,16 +39,33 @@ pub enum Error {
 impl core::fmt::Display for Error {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         match self {
-            Error::Unauthorized =>
-                write!(f, "[E001] Unauthorized: caller is not the registered oracle admin"),
-            Error::AlreadySubmitted =>
-                write!(f, "[E002] AlreadySubmitted: a result has already been recorded for this match_id"),
-            Error::ResultNotFound =>
-                write!(f, "[E003] ResultNotFound: no result has been submitted for this match_id"),
-            Error::AlreadyInitialized =>
-                write!(f, "[E004] AlreadyInitialized: contract has already been initialized"),
-            Error::InvalidGameId =>
-                write!(f, "[E005] InvalidGameId: game_id is empty or exceeds the 64-byte limit"),
+            Error::Unauthorized => {
+                write!(f, "[E001] Unauthorized: caller is not the registered oracle admin")
+            }
+            Error::AlreadySubmitted => {
+                write!(
+                    f,
+                    "[E002] AlreadySubmitted: a result has already been recorded for this match_id"
+                )
+            }
+            Error::ResultNotFound => {
+                write!(
+                    f,
+                    "[E003] ResultNotFound: no result has been submitted for this match_id"
+                )
+            }
+            Error::AlreadyInitialized => {
+                write!(
+                    f,
+                    "[E004] AlreadyInitialized: contract has already been initialized"
+                )
+            }
+            Error::InvalidGameId => {
+                write!(
+                    f,
+                    "[E005] InvalidGameId: game_id is empty or exceeds the 64-byte limit"
+                )
+            }
         }
     }
 }

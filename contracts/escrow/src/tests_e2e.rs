@@ -126,7 +126,8 @@ fn test_e2e_lifecycle_player1_wins() {
         .iter()
         .find(|(_, t, _)| *t == completed_topics)
         .expect("completed event not found");
-    let (ev_id, ev_winner, ev_payout): (u64, Winner, i128) = TryFromVal::try_from_val(&env, &data).unwrap();
+    let (ev_id, ev_winner, ev_payout): (u64, Winner, i128) =
+        TryFromVal::try_from_val(&env, &data).unwrap();
     assert_eq!(ev_id, match_id);
     assert_eq!(ev_winner, Winner::Player1);
     assert_eq!(ev_payout, stake * 2);
@@ -193,7 +194,8 @@ fn test_e2e_lifecycle_player2_wins() {
         .iter()
         .find(|(_, t, _)| *t == completed_topics)
         .expect("completed event not found");
-    let (ev_id, ev_winner, _ev_payout): (u64, Winner, i128) = TryFromVal::try_from_val(&env, &data).unwrap();
+    let (ev_id, ev_winner, _ev_payout): (u64, Winner, i128) =
+        TryFromVal::try_from_val(&env, &data).unwrap();
     assert_eq!(ev_id, match_id);
     assert_eq!(ev_winner, Winner::Player2);
 
@@ -257,7 +259,8 @@ fn test_e2e_lifecycle_draw() {
         .iter()
         .find(|(_, t, _)| *t == completed_topics)
         .expect("completed event not found");
-    let (ev_id, ev_winner, _ev_payout): (u64, Winner, i128) = TryFromVal::try_from_val(&env, &data).unwrap();
+    let (ev_id, ev_winner, _ev_payout): (u64, Winner, i128) =
+        TryFromVal::try_from_val(&env, &data).unwrap();
     assert_eq!(ev_id, match_id);
     assert_eq!(ev_winner, Winner::Draw);
 
@@ -622,8 +625,13 @@ fn test_e2e_event_sequence_full_lifecycle() {
         .iter()
         .find(|(_, t, _)| *t == created_topics)
         .expect("created event not found");
-    let (ev_id, ev_p1, ev_p2, ev_stake, _ev_game_id): (u64, Address, Address, i128, soroban_sdk::String) =
-        TryFromVal::try_from_val(&env, &created_data).unwrap();
+    let (ev_id, ev_p1, ev_p2, ev_stake, _ev_game_id): (
+        u64,
+        Address,
+        Address,
+        i128,
+        soroban_sdk::String,
+    ) = TryFromVal::try_from_val(&env, &created_data).unwrap();
     assert_eq!(ev_id, match_id);
     assert_eq!(ev_p1, player1);
     assert_eq!(ev_p2, player2);

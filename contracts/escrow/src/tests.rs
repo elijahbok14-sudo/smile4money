@@ -425,8 +425,12 @@ fn test_submit_result_random_caller_is_unauthorized() {
     let client = EscrowContractClient::new(&env, &contract_id);
 
     let id = client.create_match(
-        &player1, &player2, &100, &token,
-        &String::from_str(&env, "random_caller"), &Platform::Lichess,
+        &player1,
+        &player2,
+        &100,
+        &token,
+        &String::from_str(&env, "random_caller"),
+        &Platform::Lichess,
     );
     client.deposit(&id, &player1);
     client.deposit(&id, &player2);
@@ -476,7 +480,8 @@ fn test_submit_result_on_pending_match_fails() {
     );
 }
 
-// Issue #197: submit_result on an already Completed match should return InvalidState (no double-payout)
+// Issue #197: submit_result on an already Completed match should return
+// InvalidState (no double-payout)
 #[test]
 fn test_submit_result_on_completed_match_fails() {
     let (env, contract_id, oracle, player1, player2, token, _admin) = setup();
@@ -1530,8 +1535,12 @@ fn test_submit_result_on_cancelled_match_no_deposit_fails() {
     let client = EscrowContractClient::new(&env, &contract_id);
 
     let id = client.create_match(
-        &player1, &player2, &100, &token,
-        &String::from_str(&env, "cancelled_result2"), &Platform::Lichess,
+        &player1,
+        &player2,
+        &100,
+        &token,
+        &String::from_str(&env, "cancelled_result2"),
+        &Platform::Lichess,
     );
     client.cancel_match(&id, &player1);
 
