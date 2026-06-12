@@ -317,11 +317,6 @@ mod tests {
     /// for every possible `MatchResult` variant.
     #[test]
     fn test_oracle_submit_result_emits_event() {
-        let result_topic = vec![
-            &Env::default(), // placeholder; real env built per case
-        ];
-        let _ = result_topic; // silence unused warning; real assertions below
-
         let cases: &[(u64, MatchResult)] = &[
             (1u64, MatchResult::Player1Wins),
             (2u64, MatchResult::Player2Wins),

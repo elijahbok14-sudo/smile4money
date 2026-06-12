@@ -155,7 +155,7 @@ impl EscrowContract {
             player2,
             stake_amount,
             token,
-            game_id: game_id.clone(),
+            game_id,
             platform,
             state: MatchState::Pending,
             player1_deposited: false,
@@ -184,7 +184,7 @@ impl EscrowContract {
 
         env.events().publish(
             (Symbol::new(&env, "match"), symbol_short!("created")),
-            (id, m.player1.clone(), m.player2.clone(), stake_amount, m.game_id.clone()),
+            (id, m.player1, m.player2, stake_amount, m.game_id),
         );
 
         Ok(id)
@@ -420,7 +420,7 @@ impl EscrowContract {
 
         env.events().publish(
             (Symbol::new(&env, "match"), symbol_short!("cancelled")),
-            (match_id, caller.clone()),
+            (match_id, caller),
         );
 
         Ok(())
