@@ -35,7 +35,7 @@ impl EscrowContract {
     ///
     /// # Errors
     ///
-    /// Returns `Error::InvalidToken` if `token` is not a valid SEP-41 token contract.
+    /// Panics if `token` is not a valid SEP-41 token contract.
     pub fn initialize(
         env: Env,
         oracle: Address,
