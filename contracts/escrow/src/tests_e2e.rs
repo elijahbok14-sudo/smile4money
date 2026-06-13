@@ -12,6 +12,8 @@
 //!   - All expected events are emitted with correct data
 //!   - Error paths: wrong oracle, game_id mismatch, invalid state re-entry
 
+extern crate std;
+
 use super::*;
 use soroban_sdk::{
     testutils::{Address as _, Events},
@@ -46,7 +48,15 @@ fn setup_e2e() -> (Env, Address, Address, Address, Address, Address, Address) {
     let client = EscrowContractClient::new(&env, &contract_id);
     client.initialize(&oracle, &admin, &token_addr);
 
-    (env, contract_id, oracle, player1, player2, token_addr, admin)
+    (
+        env,
+        contract_id,
+        oracle,
+        player1,
+        player2,
+        token_addr,
+        admin,
+    )
 }
 
 // ---------------------------------------------------------------------------
@@ -124,7 +134,8 @@ fn test_e2e_lifecycle_player1_wins() {
         .iter()
         .find(|(_, t, _)| *t == completed_topics)
         .expect("completed event not found");
-    let (ev_id, ev_winner, ev_payout): (u64, Winner, i128) = TryFromVal::try_from_val(&env, &data).unwrap();
+    let (ev_id, ev_winner, ev_payout): (u64, Winner, i128) =
+        TryFromVal::try_from_val(&env, &data).unwrap();
     assert_eq!(ev_id, match_id);
     assert_eq!(ev_winner, Winner::Player1);
     assert_eq!(ev_payout, stake * 2);
@@ -191,7 +202,8 @@ fn test_e2e_lifecycle_player2_wins() {
         .iter()
         .find(|(_, t, _)| *t == completed_topics)
         .expect("completed event not found");
-    let (ev_id, ev_winner): (u64, Winner) = TryFromVal::try_from_val(&env, &data).unwrap();
+    let (ev_id, ev_winner, _ev_payout): (u64, Winner, i128) =
+        TryFromVal::try_from_val(&env, &data).unwrap();
     assert_eq!(ev_id, match_id);
     assert_eq!(ev_winner, Winner::Player2);
 
@@ -255,7 +267,8 @@ fn test_e2e_lifecycle_draw() {
         .iter()
         .find(|(_, t, _)| *t == completed_topics)
         .expect("completed event not found");
-    let (ev_id, ev_winner): (u64, Winner) = TryFromVal::try_from_val(&env, &data).unwrap();
+    let (ev_id, ev_winner, _ev_payout): (u64, Winner, i128) =
+        TryFromVal::try_from_val(&env, &data).unwrap();
     assert_eq!(ev_id, match_id);
     assert_eq!(ev_winner, Winner::Draw);
 
@@ -620,8 +633,13 @@ fn test_e2e_event_sequence_full_lifecycle() {
         .iter()
         .find(|(_, t, _)| *t == created_topics)
         .expect("created event not found");
-    let (ev_id, ev_p1, ev_p2, ev_stake): (u64, Address, Address, i128) =
-        TryFromVal::try_from_val(&env, &created_data).unwrap();
+    let (ev_id, ev_p1, ev_p2, ev_stake, _ev_game_id): (
+        u64,
+        Address,
+        Address,
+        i128,
+        soroban_sdk::String,
+    ) = TryFromVal::try_from_val(&env, &created_data).unwrap();
     assert_eq!(ev_id, match_id);
     assert_eq!(ev_p1, player1);
     assert_eq!(ev_p2, player2);
@@ -636,7 +654,9 @@ fn test_e2e_event_sequence_full_lifecycle() {
         soroban_sdk::symbol_short!("deposit").into_val(&env),
     ];
     assert!(
-        events_after_p1_deposit.iter().any(|(_, t, _)| t == deposit_topics),
+        events_after_p1_deposit
+            .iter()
+            .any(|(_, t, _)| t == deposit_topics),
         "expected (match, deposit) event after player1 deposit"
     );
 
@@ -667,7 +687,7 @@ fn test_e2e_event_sequence_full_lifecycle() {
         .iter()
         .find(|(_, t, _)| *t == completed_topics)
         .expect("completed event not found");
-    let (ev_completed_id, ev_winner): (u64, Winner) =
+    let (ev_completed_id, ev_winner, _ev_payout): (u64, Winner, i128) =
         TryFromVal::try_from_val(&env, &completed_data).unwrap();
     assert_eq!(ev_completed_id, match_id);
     assert_eq!(ev_winner, Winner::Player1);

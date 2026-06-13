@@ -35,7 +35,7 @@ impl EscrowContract {
     ///
     /// # Errors
     ///
-    /// Returns `Error::InvalidToken` if `token` is not a valid SEP-41 token contract.
+    /// Panics if `token` is not a valid SEP-41 token contract.
     pub fn initialize(
         env: Env,
         oracle: Address,
@@ -155,7 +155,7 @@ impl EscrowContract {
             player2,
             stake_amount,
             token,
-            game_id: game_id.clone(),
+            game_id,
             platform,
             state: MatchState::Pending,
             player1_deposited: false,
@@ -184,7 +184,7 @@ impl EscrowContract {
 
         env.events().publish(
             (Symbol::new(&env, "match"), symbol_short!("created")),
-            (id, m.player1.clone(), m.player2.clone(), stake_amount, m.game_id.clone()),
+            (id, m.player1, m.player2, stake_amount, m.game_id),
         );
 
         Ok(id)
@@ -275,7 +275,8 @@ impl EscrowContract {
     }
 
     /// Oracle submits the verified match result and triggers payout.
-    /// `game_id` must match the game_id stored in the match to prevent cross-match result injection.
+    /// `game_id` must match the game_id stored in the match to prevent
+    /// cross-match result injection.
     pub fn submit_result(
         env: Env,
         match_id: u64,
@@ -325,16 +326,12 @@ impl EscrowContract {
         };
 
         match winner {
-            Winner::Player1 => client.transfer(
-                &env.current_contract_address(),
-                &m.player1,
-                &payout_amount,
-            ),
-            Winner::Player2 => client.transfer(
-                &env.current_contract_address(),
-                &m.player2,
-                &payout_amount,
-            ),
+            Winner::Player1 => {
+                client.transfer(&env.current_contract_address(), &m.player1, &payout_amount)
+            }
+            Winner::Player2 => {
+                client.transfer(&env.current_contract_address(), &m.player2, &payout_amount)
+            }
             Winner::Draw => {
                 client.transfer(&env.current_contract_address(), &m.player1, &payout_amount);
                 client.transfer(&env.current_contract_address(), &m.player2, &payout_amount);
@@ -355,7 +352,8 @@ impl EscrowContract {
         );
 
         let topics = (Symbol::new(&env, "match"), symbol_short!("completed"));
-        env.events().publish(topics, (match_id, winner, payout_amount));
+        env.events()
+            .publish(topics, (match_id, winner, payout_amount));
 
         Ok(())
     }
@@ -419,7 +417,7 @@ impl EscrowContract {
 
         env.events().publish(
             (Symbol::new(&env, "match"), symbol_short!("cancelled")),
-            (match_id, caller.clone()),
+            (match_id, caller),
         );
 
         Ok(())

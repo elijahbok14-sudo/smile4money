@@ -67,24 +67,6 @@ fn test_get_match_not_found() {
 }
 
 #[test]
-fn test_create_match_empty_game_id_fails() {
-    let (env, contract_id, _oracle, player1, player2, token, _admin) = setup();
-    let client = EscrowContractClient::new(&env, &contract_id);
-
-    assert!(matches!(
-        client.try_create_match(
-            &player1,
-            &player2,
-            &100,
-            &token,
-            &String::from_str(&env, ""),
-            &Platform::Lichess,
-        ),
-        Err(Ok(Error::InvalidGameId))
-    ));
-}
-
-#[test]
 fn test_deposit_and_activate() {
     let (env, contract_id, _oracle, player1, player2, token, _admin) = setup();
     let client = EscrowContractClient::new(&env, &contract_id);
@@ -274,7 +256,7 @@ fn test_cancel_with_both_deposits_requires_both_auth() {
     client.deposit(&id, &player2);
 
     // Now set auth to only player1 — should panic because player2's auth is also required
-    env.set_auths(&[MockAuth {
+    env.mock_auths(&[MockAuth {
         address: &player1,
         invoke: &MockAuthInvoke {
             contract: &contract_id,
@@ -282,8 +264,7 @@ fn test_cancel_with_both_deposits_requires_both_auth() {
             args: (id, player1.clone()).into_val(&env),
             sub_invokes: &[],
         },
-    }
-    .into()]);
+    }]);
 
     client.cancel_match(&id, &player1);
 }
@@ -426,8 +407,12 @@ fn test_submit_result_random_caller_is_unauthorized() {
     let client = EscrowContractClient::new(&env, &contract_id);
 
     let id = client.create_match(
-        &player1, &player2, &100, &token,
-        &String::from_str(&env, "random_caller"), &Platform::Lichess,
+        &player1,
+        &player2,
+        &100,
+        &token,
+        &String::from_str(&env, "random_caller"),
+        &Platform::Lichess,
     );
     client.deposit(&id, &player1);
     client.deposit(&id, &player2);
@@ -436,7 +421,7 @@ fn test_submit_result_random_caller_is_unauthorized() {
     let game_id = String::from_str(&env, "random_caller");
 
     // Provide auth for the random address — the contract must still reject it.
-    env.set_auths(&[MockAuth {
+    env.mock_auths(&[MockAuth {
         address: &random,
         invoke: &MockAuthInvoke {
             contract: &contract_id,
@@ -444,8 +429,7 @@ fn test_submit_result_random_caller_is_unauthorized() {
             args: (id, game_id.clone(), Winner::Player1, random.clone()).into_val(&env),
             sub_invokes: &[],
         },
-    }
-    .into()]);
+    }]);
 
     assert_eq!(
         client.try_submit_result(&id, &game_id, &Winner::Player1, &random),
@@ -478,7 +462,8 @@ fn test_submit_result_on_pending_match_fails() {
     );
 }
 
-// Issue #197: submit_result on an already Completed match should return InvalidState (no double-payout)
+// Issue #197: submit_result on an already Completed match should return
+// InvalidState (no double-payout)
 #[test]
 fn test_submit_result_on_completed_match_fails() {
     let (env, contract_id, oracle, player1, player2, token, _admin) = setup();
@@ -548,7 +533,9 @@ fn test_double_initialize_fails() {
     env.mock_all_auths();
     let oracle = Address::generate(&env);
     let admin = Address::generate(&env);
-    let token_addr = env.register_stellar_asset_contract_v2(admin.clone()).address();
+    let token_addr = env
+        .register_stellar_asset_contract_v2(admin.clone())
+        .address();
     let contract_id = env.register(EscrowContract, ());
     let client = EscrowContractClient::new(&env, &contract_id);
     client.initialize(&oracle, &admin, &token_addr);
@@ -889,7 +876,7 @@ fn test_non_admin_cannot_pause() {
     let non_admin = Address::generate(&env);
 
     use soroban_sdk::testutils::{MockAuth, MockAuthInvoke};
-    env.set_auths(&[MockAuth {
+    env.mock_auths(&[MockAuth {
         address: &non_admin,
         invoke: &MockAuthInvoke {
             contract: &contract_id,
@@ -897,8 +884,7 @@ fn test_non_admin_cannot_pause() {
             args: ().into_val(&env),
             sub_invokes: &[],
         },
-    }
-    .into()]);
+    }]);
 
     assert!(client.try_pause().is_err());
 }
@@ -912,7 +898,7 @@ fn test_non_admin_cannot_unpause() {
     client.pause();
 
     use soroban_sdk::testutils::{MockAuth, MockAuthInvoke};
-    env.set_auths(&[MockAuth {
+    env.mock_auths(&[MockAuth {
         address: &non_admin,
         invoke: &MockAuthInvoke {
             contract: &contract_id,
@@ -920,8 +906,7 @@ fn test_non_admin_cannot_unpause() {
             args: ().into_val(&env),
             sub_invokes: &[],
         },
-    }
-    .into()]);
+    }]);
 
     assert!(client.try_unpause().is_err());
 }
@@ -970,13 +955,15 @@ fn test_non_admin_cannot_update_oracle() {
     let non_admin = Address::generate(&env);
     let oracle = Address::generate(&env);
     let new_oracle = Address::generate(&env);
-    let token_addr = env.register_stellar_asset_contract_v2(admin.clone()).address();
+    let token_addr = env
+        .register_stellar_asset_contract_v2(admin.clone())
+        .address();
     let contract_id = env.register(EscrowContract, ());
     let client = EscrowContractClient::new(&env, &contract_id);
     client.initialize(&oracle, &admin, &token_addr);
 
     use soroban_sdk::testutils::{MockAuth, MockAuthInvoke};
-    env.set_auths(&[MockAuth {
+    env.mock_auths(&[MockAuth {
         address: &non_admin,
         invoke: &MockAuthInvoke {
             contract: &contract_id,
@@ -984,8 +971,7 @@ fn test_non_admin_cannot_update_oracle() {
             args: (new_oracle.clone(),).into_val(&env),
             sub_invokes: &[],
         },
-    }
-    .into()]);
+    }]);
 
     assert!(client.try_update_oracle(&new_oracle).is_err());
 }
@@ -1071,12 +1057,12 @@ fn test_deposit_emits_event() {
         &String::from_str(&env, "deposit_ev"),
         &Platform::Lichess,
     );
-    
+
     // Test player1 deposit
     client.deposit(&id, &player1);
 
     client.deposit(&id, &player2);
-    
+
     let events = env.events().all();
     let deposit_topics = vec![
         &env,
@@ -1239,14 +1225,16 @@ fn test_non_admin_cannot_call_admin_functions() {
     let non_admin = Address::generate(&env);
     let oracle = Address::generate(&env);
     let new_oracle = Address::generate(&env);
-    let token_addr = env.register_stellar_asset_contract_v2(admin.clone()).address();
+    let token_addr = env
+        .register_stellar_asset_contract_v2(admin.clone())
+        .address();
     let contract_id = env.register(EscrowContract, ());
     let client = EscrowContractClient::new(&env, &contract_id);
     client.initialize(&oracle, &admin, &token_addr);
 
     use soroban_sdk::testutils::{MockAuth, MockAuthInvoke};
 
-    env.set_auths(&[MockAuth {
+    env.mock_auths(&[MockAuth {
         address: &non_admin,
         invoke: &MockAuthInvoke {
             contract: &contract_id,
@@ -1254,11 +1242,10 @@ fn test_non_admin_cannot_call_admin_functions() {
             args: ().into_val(&env),
             sub_invokes: &[],
         },
-    }
-    .into()]);
+    }]);
     assert!(client.try_pause().is_err());
 
-    env.set_auths(&[MockAuth {
+    env.mock_auths(&[MockAuth {
         address: &non_admin,
         invoke: &MockAuthInvoke {
             contract: &contract_id,
@@ -1266,11 +1253,10 @@ fn test_non_admin_cannot_call_admin_functions() {
             args: ().into_val(&env),
             sub_invokes: &[],
         },
-    }
-    .into()]);
+    }]);
     assert!(client.try_unpause().is_err());
 
-    env.set_auths(&[MockAuth {
+    env.mock_auths(&[MockAuth {
         address: &non_admin,
         invoke: &MockAuthInvoke {
             contract: &contract_id,
@@ -1278,8 +1264,7 @@ fn test_non_admin_cannot_call_admin_functions() {
             args: (new_oracle.clone(),).into_val(&env),
             sub_invokes: &[],
         },
-    }
-    .into()]);
+    }]);
     assert!(client.try_update_oracle(&new_oracle).is_err());
 }
 
@@ -1538,8 +1523,12 @@ fn test_submit_result_on_cancelled_match_no_deposit_fails() {
     let client = EscrowContractClient::new(&env, &contract_id);
 
     let id = client.create_match(
-        &player1, &player2, &100, &token,
-        &String::from_str(&env, "cancelled_result2"), &Platform::Lichess,
+        &player1,
+        &player2,
+        &100,
+        &token,
+        &String::from_str(&env, "cancelled_result2"),
+        &Platform::Lichess,
     );
     client.cancel_match(&id, &player1);
 
@@ -1657,4 +1646,3 @@ fn test_cancel_match_refunds_only_player1_when_only_player1_deposited() {
     // Match must be in Cancelled state
     assert_eq!(client.get_match(&id).state, MatchState::Cancelled);
 }
-

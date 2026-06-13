@@ -183,7 +183,7 @@ mod tests {
         client.initialize(&admin);
 
         use soroban_sdk::testutils::{MockAuth, MockAuthInvoke};
-        env.set_auths(&[MockAuth {
+        env.mock_auths(&[MockAuth {
             address: &non_admin,
             invoke: &MockAuthInvoke {
                 contract: &contract_id,
@@ -196,8 +196,7 @@ mod tests {
                     .into_val(&env),
                 sub_invokes: &[],
             },
-        }
-        .into()]);
+        }]);
 
         assert!(client
             .try_submit_result(
@@ -281,7 +280,7 @@ mod tests {
         client.initialize(&admin);
 
         use soroban_sdk::testutils::{MockAuth, MockAuthInvoke};
-        env.set_auths(&[MockAuth {
+        env.mock_auths(&[MockAuth {
             address: &non_admin,
             invoke: &MockAuthInvoke {
                 contract: &contract_id,
@@ -289,8 +288,7 @@ mod tests {
                 args: (new_admin.clone(),).into_val(&env),
                 sub_invokes: &[],
             },
-        }
-        .into()]);
+        }]);
 
         assert!(client.try_transfer_admin(&new_admin).is_err());
     }
@@ -319,11 +317,6 @@ mod tests {
     /// for every possible `MatchResult` variant.
     #[test]
     fn test_oracle_submit_result_emits_event() {
-        let result_topic = vec![
-            &Env::default(), // placeholder; real env built per case
-        ];
-        let _ = result_topic; // silence unused warning; real assertions below
-
         let cases: &[(u64, MatchResult)] = &[
             (1u64, MatchResult::Player1Wins),
             (2u64, MatchResult::Player2Wins),
@@ -359,8 +352,7 @@ mod tests {
 
             assert!(
                 matched.is_some(),
-                "No result event emitted for variant {:?}",
-                expected_result
+                "No result event emitted for variant {expected_result:?}",
             );
 
             let (_, _, actual_data) = matched.unwrap();
@@ -368,18 +360,15 @@ mod tests {
                 soroban_sdk::TryFromVal::try_from_val(&env, &actual_data).unwrap();
             assert_eq!(
                 ev_match_id, *match_id,
-                "match_id mismatch for variant {:?}",
-                expected_result
+                "match_id mismatch for variant {expected_result:?}",
             );
             assert_eq!(
                 &ev_result, expected_result,
-                "result mismatch for variant {:?}",
-                expected_result
+                "result mismatch for variant {expected_result:?}",
             );
             assert_eq!(
                 ev_timestamp, timestamp,
-                "timestamp mismatch for variant {:?}",
-                expected_result
+                "timestamp mismatch for variant {expected_result:?}",
             );
         }
     }
