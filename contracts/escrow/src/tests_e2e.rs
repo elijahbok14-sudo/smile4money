@@ -1,4 +1,4 @@
-﻿//! End-to-end integration tests for the full match lifecycle.
+//! End-to-end integration tests for the full match lifecycle.
 //!
 //! Closes #43 -- Issue #216: Add comprehensive integration test covering the
 //! complete match lifecycle: create -> both deposits -> oracle submits result ->

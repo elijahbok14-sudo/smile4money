@@ -1110,8 +1110,11 @@ fn test_submit_result_emits_event() {
     assert!(matched.is_some());
 
     let (_, _, data) = matched.unwrap();
-    let (ev_id, ev_winner): (u64, Winner) = TryFromVal::try_from_val(&env, &data).unwrap();
-    assert_eq!((ev_id, ev_winner), (id, Winner::Player1));
+    let (ev_id, ev_winner, ev_payout): (u64, Winner, i128) =
+        TryFromVal::try_from_val(&env, &data).unwrap();
+    assert_eq!(ev_id, id);
+    assert_eq!(ev_winner, Winner::Player1);
+    assert_eq!(ev_payout, 200);
 }
 
 #[test]
