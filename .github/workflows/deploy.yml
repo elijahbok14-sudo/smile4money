@@ -39,7 +39,12 @@ jobs:
       - name: Import deployer identity
         env:
           DEPLOYER_SECRET: ${{ secrets.DEPLOYER_SECRET_KEY }}
-        run: stellar keys add deployer --secret-key "$DEPLOYER_SECRET"
+        run: |
+          if [ -z "$DEPLOYER_SECRET" ]; then
+            echo "DEPLOYER_SECRET_KEY secret is not set — skipping deploy"
+            exit 1
+          fi
+          stellar keys add deployer --secret-key "$DEPLOYER_SECRET"
 
       - name: Deploy
         run: ./scripts/deploy_testnet.sh

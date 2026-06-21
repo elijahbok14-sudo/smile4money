@@ -221,7 +221,7 @@ fn test_player2_can_cancel_pending_match() {
 }
 
 #[test]
-#[should_panic(expected = "HostError: Error(Auth, InvalidAction)")]
+#[should_panic(expected = "Error(Contract, #5)")]
 fn test_cancel_with_both_deposits_requires_both_auth() {
     use soroban_sdk::testutils::{MockAuth, MockAuthInvoke};
 
