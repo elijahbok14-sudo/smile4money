@@ -1650,6 +1650,56 @@ fn test_cancel_match_refunds_only_player1_when_only_player1_deposited() {
     assert_eq!(client.get_match(&id).state, MatchState::Cancelled);
 }
 
+// Issue: deposit returns InsufficientAllowance when player has not approved the contract
+#[test]
+fn test_deposit_insufficient_allowance() {
+    let (env, contract_id, _oracle, player1, player2, token, _admin) = setup();
+    let client = EscrowContractClient::new(&env, &contract_id);
+
+    let id = client.create_match(
+        &player1,
+        &player2,
+        &100,
+        &token,
+        &String::from_str(&env, "allowance_zero"),
+        &Platform::Lichess,
+    );
+
+    // Ensure no allowance is set (default is 0)
+    let token_client = TokenClient::new(&env, &token);
+    assert_eq!(token_client.allowance(&player1, &contract_id), 0);
+
+    assert_eq!(
+        client.try_deposit(&id, &player1),
+        Err(Ok(Error::InsufficientAllowance))
+    );
+}
+
+// Issue: deposit succeeds when allowance is exactly the stake amount
+#[test]
+fn test_deposit_succeeds_with_exact_allowance() {
+    let (env, contract_id, _oracle, player1, player2, token, _admin) = setup();
+    let client = EscrowContractClient::new(&env, &contract_id);
+    let token_client = TokenClient::new(&env, &token);
+
+    // Set the allowance to exactly the stake amount: 100
+    let asset_client = StellarAssetClient::new(&env, &token);
+    asset_client.approve(&player1, &contract_id, &100);
+
+    let id = client.create_match(
+        &player1,
+        &player2,
+        &100,
+        &token,
+        &String::from_str(&env, "exact_allowance"),
+        &Platform::Lichess,
+    );
+
+    client.deposit(&id, &player1);
+    assert_eq!(token_client.balance(&player1), 900);
+    assert_eq!(client.get_escrow_balance(&id), 100);
+}
+
 // Issue #912: emergency_drain — success, unpaused guard, non-admin guard
 
 #[test]

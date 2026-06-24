@@ -232,6 +232,10 @@ impl EscrowContract {
         }
 
         let client = token::Client::new(&env, &m.token);
+        let allowance = client.allowance(&player, &env.current_contract_address());
+        if allowance < m.stake_amount {
+            return Err(Error::InsufficientAllowance);
+        }
         client
             .try_transfer(&player, &env.current_contract_address(), &m.stake_amount)
             .map_err(|_| Error::TransferFailed)?
