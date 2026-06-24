@@ -1,121 +1,370 @@
-# Emergency Drain Runbook
+# Operational Runbook — smile4money
 
-Procedure for using `emergency_drain` to recover funds from the escrow contract during a critical exploit.
+> **Audience:** On-call engineers and administrators with access to the admin private key.
+> **Scope:** Emergency response, oracle key rotation, and post-incident analysis.
 
-## When to use this
+---
 
-Use `emergency_drain` only when:
+## Table of Contents
 
-- An active exploit is draining or threatening to drain the escrow contract, **and**
-- There is no time to wait for match resolution via the oracle.
+1. [Emergency Contract Pause](#1-emergency-contract-pause)
+2. [Oracle Signing Key Rotation](#2-oracle-signing-key-rotation)
+3. [Emergency Fund Drain](#3-emergency-fund-drain)
+4. [Unpausing the Contract](#4-unpausing-the-contract)
+5. [Post-Incident Report Template](#5-post-incident-report-template)
+6. [Contact Escalation List](#6-contact-escalation-list)
 
-Do **not** use it for routine administration. The function transfers every token the contract holds to a single address in one transaction, bypassing all per-match accounting.
+---
 
-## Prerequisites
+## 1. Emergency Contract Pause
 
-- The **admin private key** for the deployed contract.
-- A **safe cold-wallet address** (`SAFE_ADDRESS`) controlled offline or by multi-sig, never the admin hot wallet.
-- The **Stellar CLI** (`stellar`) installed and configured for the target network.
-- The **contract address** (`CONTRACT_ADDRESS`) of the deployed escrow contract.
+**When to use:** Suspected exploit, incorrect payout, oracle compromise, or any situation where
+halting new activity is safer than continuing operations.
 
-## Step-by-step
+**Who can pause:** Only the `admin` address set during `initialize`.
 
-### 1. Confirm the exploit
+**Effect:** Blocks `create_match`, `deposit`, and `submit_result`. `cancel_match` remains
+available so players can always recover their funds.
 
-Before draining, verify the threat is real:
+### Steps
+
+#### 1.1 Confirm the admin identity
 
 ```bash
-stellar contract invoke \
-  --id $CONTRACT_ADDRESS \
-  --network $NETWORK \
-  -- get_match --match_id <id>
+# Verify your local key matches the on-chain admin
+stellar keys address admin-key
+# Compare output against the CONTRACT_ADMIN value in your .env
 ```
 
-Check unusual state transitions, repeated results submitted for the same match, or the contract balance dropping unexpectedly.
-
-### 2. Pause the contract
-
-Pausing blocks `create_match`, `deposit`, and `submit_result` immediately.
+#### 1.2 Pause the escrow contract
 
 ```bash
 stellar contract invoke \
-  --id $CONTRACT_ADDRESS \
-  --source $ADMIN_SECRET_KEY \
-  --network $NETWORK \
+  --id "$CONTRACT_ESCROW" \
+  --source admin-key \
+  --network testnet \
   -- pause
 ```
 
-Confirm the contract is paused before proceeding. Any subsequent call to `create_match` or `deposit` should return `Error::ContractPaused (9)`.
+For **mainnet**, replace `--network testnet` with `--network mainnet`.
 
-### 3. Drain to the safe address
+#### 1.3 Verify the pause is in effect
+
+```bash
+# This call should return an error: Error::ContractPaused (code 9)
+stellar contract invoke \
+  --id "$CONTRACT_ESCROW" \
+  --source any-key \
+  --network testnet \
+  -- create_match \
+  --player1 GDUMMY1 \
+  --player2 GDUMMY2 \
+  --stake_amount 1 \
+  --token GDUMMY3 \
+  --game_id test \
+  --platform '{"Lichess":{}}'
+# Expected output: error code 9 (ContractPaused)
+```
+
+Alternatively, query the `Paused` instance storage key using Stellar's RPC:
+
+```bash
+curl -s "https://soroban-testnet.stellar.org" \
+  -X POST \
+  -H "Content-Type: application/json" \
+  -d '{
+    "jsonrpc":"2.0","id":1,
+    "method":"getLedgerEntries",
+    "params":{"keys":["<PAUSED_LEDGER_KEY_XDR>"]}
+  }'
+```
+
+#### 1.4 Notify the team
+
+Post to the incident channel immediately:
+
+```
+[INCIDENT] Escrow contract PAUSED at ledger <N> by <admin-address>.
+Reason: <brief description>
+Next action: <investigation / drain / oracle rotation>
+```
+
+---
+
+## 2. Oracle Signing Key Rotation
+
+**When to use:** Oracle private key is compromised, exposed in logs, or as a scheduled rotation.
+
+**Who can rotate:** Only the `admin` address.
+
+### Steps
+
+#### 2.1 Generate a new oracle keypair
+
+```bash
+stellar keys generate new-oracle-key --network testnet
+stellar keys address new-oracle-key
+# Save the output address as NEW_ORACLE_ADDRESS
+```
+
+For mainnet, **generate the keypair offline** on an air-gapped machine and import the public
+address only:
+
+```bash
+# On air-gapped machine
+stellar keys generate new-oracle-key
+stellar keys address new-oracle-key   # copy this address
+
+# On connected machine — fund the new account
+stellar account fund --address <NEW_ORACLE_ADDRESS> --network testnet
+```
+
+#### 2.2 Fund the new oracle account (testnet)
+
+```bash
+stellar account fund --address "$NEW_ORACLE_ADDRESS" --network testnet
+```
+
+#### 2.3 Call `update_oracle` on the escrow contract
 
 ```bash
 stellar contract invoke \
-  --id $CONTRACT_ADDRESS \
-  --source $ADMIN_SECRET_KEY \
-  --network $NETWORK \
+  --id "$CONTRACT_ESCROW" \
+  --source admin-key \
+  --network testnet \
+  -- update_oracle \
+  --new_oracle "$NEW_ORACLE_ADDRESS"
+```
+
+#### 2.4 Call `transfer_admin` on the oracle contract
+
+The oracle **contract** also has its own admin (the off-chain service key). Rotate it too:
+
+```bash
+stellar contract invoke \
+  --id "$CONTRACT_ORACLE" \
+  --source old-oracle-key \
+  --network testnet \
+  -- transfer_admin \
+  --new_admin "$NEW_ORACLE_ADDRESS"
+```
+
+#### 2.5 Verify the new oracle is registered
+
+```bash
+# Submit a test result with the new key (use a safe test match_id on testnet)
+stellar contract invoke \
+  --id "$CONTRACT_ORACLE" \
+  --source new-oracle-key \
+  --network testnet \
+  -- submit_result \
+  --match_id 0 \
+  --game_id "rotation-verify-test" \
+  --result '{"Player1Wins":{}}'
+```
+
+Expected: success (or `AlreadySubmitted` if a result already exists — both confirm auth works).
+
+#### 2.6 Update the oracle service configuration
+
+```bash
+# In the oracle service deployment (e.g., systemd, Docker, or cloud secret store):
+# Replace ORACLE_SIGNING_KEY with the new key
+# Restart the oracle service and confirm it re-connects successfully
+systemctl restart smile4money-oracle   # or equivalent
+journalctl -u smile4money-oracle -f    # watch for errors
+```
+
+#### 2.7 Revoke and destroy the old key
+
+- Remove the old key from all `.env` files and secret stores.
+- If using a hardware wallet, revoke the signing slot.
+- Document the rotation in the incident log.
+
+---
+
+## 3. Emergency Fund Drain
+
+**When to use:** Active exploit with no time for match-by-match resolution. Transfers the
+entire contract token balance to a safe cold-wallet address.
+
+> ⚠️ **This is irreversible.** All in-progress matches will lose their escrowed funds.
+> Use only when the alternative is losing more funds to an exploit.
+
+### Prerequisites
+
+- Contract must be **paused** (see §1).
+- A **safe cold-wallet address** (`SAFE_ADDRESS`) that is NOT the admin hot wallet.
+
+### Steps
+
+#### 3.1 Confirm the contract is paused (see §1.3)
+
+#### 3.2 Execute the drain
+
+```bash
+stellar contract invoke \
+  --id "$CONTRACT_ESCROW" \
+  --source admin-key \
+  --network testnet \
   -- emergency_drain \
-     --to $SAFE_ADDRESS \
-     --caller $ADMIN_ADDRESS
+  --to "$SAFE_ADDRESS" \
+  --caller "$ADMIN_ADDRESS"
 ```
 
-`emergency_drain` will:
-
-1. Verify `caller` is the registered admin.
-2. Verify the contract is paused (returns `Error::NotPaused (18)` otherwise).
-3. Query the contract's token balance.
-4. Transfer the full balance to `to`.
-5. Emit an `admin:drain` event recording `(amount, to, admin)`.
-
-If the balance is zero the call succeeds silently (no transfer is attempted).
-
-### 4. Verify the transfer
+#### 3.3 Confirm balance is zero
 
 ```bash
 stellar contract invoke \
-  --id $TOKEN_ADDRESS \
-  --network $NETWORK \
-  -- balance --id $SAFE_ADDRESS
+  --id "$CONTRACT_ESCROW" \
+  --source any-key \
+  --network testnet \
+  -- get_escrow_balance \
+  --match_id 0
+# Should return 0 for all match IDs
 ```
 
-The safe address should hold the drained amount. The contract balance should be zero.
-
-### 5. Record the incident
-
-Document:
-
-- UTC timestamp of `pause()` and `emergency_drain()`.
-- Transaction hashes for both calls.
-- Amount drained and destination address.
-- Root cause (if known at time of drain).
-
-Keep this in an incident log separate from the repository.
-
-### 6. Post-incident
-
-After the exploit is fully understood and patched:
-
-- Deploy a new contract version.
-- Redistribute funds from `SAFE_ADDRESS` to affected players based on the match state at time of pause.
-- Unpause or retire the old contract as appropriate.
+Check the contract's raw token balance:
 
 ```bash
-# Unpause (only if continuing to use the same contract)
 stellar contract invoke \
-  --id $CONTRACT_ADDRESS \
-  --source $ADMIN_SECRET_KEY \
-  --network $NETWORK \
+  --id "$TOKEN_ADDRESS" \
+  --source any-key \
+  --network testnet \
+  -- balance \
+  --id "$CONTRACT_ESCROW"
+# Expected: 0
+```
+
+#### 3.4 Record the drain transaction hash and notify all stakeholders
+
+---
+
+## 4. Unpausing the Contract
+
+Only unpause after the incident is fully resolved and the root cause has been addressed.
+
+### Checklist before unpausing
+
+- [ ] Root cause identified and fixed (contract upgrade or oracle key rotated)
+- [ ] All affected matches manually reconciled (refunds issued if needed)
+- [ ] At least one other team member has reviewed and signed off
+- [ ] Incident report drafted (see §5)
+
+### Command
+
+```bash
+stellar contract invoke \
+  --id "$CONTRACT_ESCROW" \
+  --source admin-key \
+  --network testnet \
   -- unpause
 ```
 
-## Error reference
+### Verify
 
-| Error | Code | Meaning |
-|-------|------|---------|
-| `NotPaused` | 18 | `emergency_drain` called without pausing first |
-| `Unauthorized` | 4 | `caller` is not the registered admin |
+```bash
+# Should succeed and return a match_id
+stellar contract invoke \
+  --id "$CONTRACT_ESCROW" \
+  --source player1-key \
+  --network testnet \
+  -- create_match \
+  --player1 "$PLAYER1_ADDRESS" \
+  --player2 "$PLAYER2_ADDRESS" \
+  --stake_amount 10000000 \
+  --token "$TOKEN_ADDRESS" \
+  --game_id "post-incident-verify" \
+  --platform '{"Lichess":{}}'
+```
 
-## Future enhancements
+---
 
-- **Time-lock**: enforce a minimum delay (e.g., 24 h) between `pause()` and `emergency_drain()` so players can challenge an illegitimate drain before it executes.
-- **Multi-sig**: require M-of-N admin key signatures so no single compromised key can drain the contract unilaterally.
+## 5. Post-Incident Report Template
+
+Copy this template and fill it in for every incident, regardless of severity.
+
+---
+
+### Incident Report — [YYYY-MM-DD] [Brief Title]
+
+**Severity:** Critical / High / Medium / Low
+**Status:** Open / Resolved
+**Report Author:** [Name / GitHub handle]
+**Reviewed by:** [Name / GitHub handle]
+
+#### Timeline
+
+| Time (UTC) | Event |
+|------------|-------|
+| HH:MM | Incident detected (how: alert / user report / monitoring) |
+| HH:MM | On-call engineer paged |
+| HH:MM | Contract paused at ledger N (tx hash: `...`) |
+| HH:MM | Root cause identified |
+| HH:MM | Fix deployed / oracle rotated |
+| HH:MM | Contract unpaused at ledger N (tx hash: `...`) |
+| HH:MM | Incident resolved |
+
+#### Impact
+
+- **Users affected:** [number / description]
+- **Funds at risk:** [amount in XLM/USDC]
+- **Funds lost:** [amount, or "none"]
+- **Matches disrupted:** [match IDs]
+- **Duration of outage:** [HH:MM]
+
+#### Root Cause
+
+[One paragraph describing what went wrong, why it happened, and what allowed it to occur.]
+
+#### What Went Well
+
+- [Item 1]
+- [Item 2]
+
+#### What Went Poorly
+
+- [Item 1]
+- [Item 2]
+
+#### Remediation
+
+| Action | Owner | Due Date | Status |
+|--------|-------|----------|--------|
+| [Fix description] | [Name] | YYYY-MM-DD | Open |
+| [Monitoring improvement] | [Name] | YYYY-MM-DD | Open |
+| [Runbook update] | [Name] | YYYY-MM-DD | Open |
+
+#### Sign-off
+
+- [ ] Incident lead reviewed
+- [ ] Second team member reviewed
+- [ ] Remediation items tracked in GitHub Issues
+
+---
+
+## 6. Contact Escalation List
+
+> Replace placeholder entries with real contact information before deploying to mainnet.
+
+| Role | Contact | How to reach |
+|------|---------|--------------|
+| On-call engineer (primary) | [Name] | PagerDuty / Signal |
+| On-call engineer (backup) | [Name] | PagerDuty / Signal |
+| Contract admin keyholder | [Name] | End-to-end encrypted message only |
+| Oracle service owner | [Name] | Slack `#oracle-ops` |
+| Stellar network status | SDF | https://status.stellar.org |
+| Lichess API status | Lichess | https://lichess.org/status |
+| Chess.com API status | Chess.com | https://www.chess.com/news |
+
+### Escalation path
+
+1. On-call primary — immediate (0–15 min)
+2. On-call backup — if primary unreachable (15–30 min)
+3. Contract admin keyholder — required for pause/drain/oracle rotation
+4. All team leads — severity Critical only
+
+---
+
+*This runbook is a living document. Update it whenever a procedure changes or a gap is discovered
+during an incident. The reviewing engineer is responsible for merging updates.*
