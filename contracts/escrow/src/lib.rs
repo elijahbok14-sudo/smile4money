@@ -71,6 +71,20 @@ impl EscrowContract {
             .unwrap_or(false)
     }
 
+    fn get_match_count(env: &Env) -> u64 {
+        env.storage()
+            .instance()
+            .get(&DataKey::MatchCount)
+            .unwrap_or(0)
+    }
+
+    fn validate_match_id(env: &Env, match_id: u64) -> Result<(), Error> {
+        if match_id >= Self::get_match_count(env) {
+            return Err(Error::MatchNotFound);
+        }
+        Ok(())
+    }
+
     /// Initialize the contract with a trusted oracle address, an admin, and a default token.
     ///
     /// # Panics
@@ -237,12 +251,21 @@ impl EscrowContract {
     }
 
     /// Player deposits their stake into escrow.
+    ///
+    /// # SAFETY: no re-entrancy risk
+    /// Soroban's runtime prevents contract re-entry during execution. All state
+    /// changes (marking the player as deposited, updating match state) occur
+    /// after the external token transfer call — following the checks-effects-
+    /// interactions pattern. Even if the token contract attempted a re-entrant
+    /// call, the Soroban SDK would reject it at the host function level.
     pub fn deposit(env: Env, match_id: u64, player: Address) -> Result<(), Error> {
         player.require_auth();
 
         if Self::is_paused(&env) {
             return Err(Error::ContractPaused);
         }
+
+        Self::validate_match_id(&env, match_id)?;
 
         let mut m: Match = env
             .storage()
@@ -278,6 +301,10 @@ impl EscrowContract {
         }
 
         let client = token::Client::new(&env, &m.token);
+        let allowance = client.allowance(&player, &env.current_contract_address());
+        if allowance < m.stake_amount {
+            return Err(Error::InsufficientAllowance);
+        }
         client
             .try_transfer(&player, &env.current_contract_address(), &m.stake_amount)
             .map_err(|_| Error::TransferFailed)?
@@ -323,6 +350,12 @@ impl EscrowContract {
     /// Oracle submits the verified match result and triggers payout.
     /// `game_id` must match the game_id stored in the match to prevent
     /// cross-match result injection.
+    ///
+    /// # SAFETY: no re-entrancy risk
+    /// Soroban's runtime prevents contract re-entry during execution. The payout
+    /// transfer(s) are the final interactions before the state is committed as
+    /// Completed. All validation (caller auth, game_id match, state check) occurs
+    /// before any external call, following the checks-effects-interactions pattern.
     pub fn submit_result(
         env: Env,
         match_id: u64,
@@ -344,6 +377,8 @@ impl EscrowContract {
             return Err(Error::Unauthorized);
         }
         caller.require_auth();
+
+        Self::validate_match_id(&env, match_id)?;
 
         let mut m: Match = env
             .storage()
@@ -413,6 +448,8 @@ impl EscrowContract {
     ///
     /// Cancelation is allowed while the contract is paused so players can recover funds.
     pub fn cancel_match(env: Env, match_id: u64, caller: Address) -> Result<(), Error> {
+        Self::validate_match_id(&env, match_id)?;
+
         let mut m: Match = env
             .storage()
             .persistent()
@@ -519,6 +556,7 @@ impl EscrowContract {
 
     /// Read a match by ID.
     pub fn get_match(env: Env, match_id: u64) -> Result<Match, Error> {
+        Self::validate_match_id(&env, match_id)?;
         env.storage()
             .persistent()
             .get(&DataKey::Match(match_id))

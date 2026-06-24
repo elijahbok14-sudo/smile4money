@@ -28,6 +28,8 @@ use soroban_sdk::contracterror;
 /// | 15   | TransferFailed     | token transfer failed                                |
 /// | 16   | MatchCancelled     | deposit rejected: match has been cancelled           |
 /// | 17   | MatchCompleted     | deposit rejected: match has already completed        |
+/// | 18   | NotPaused          | emergency_drain requires the contract to be paused   |
+/// | 19   | InsufficientAllowance | player has not approved sufficient token allowance |
 #[contracterror]
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub enum Error {
@@ -89,4 +91,9 @@ pub enum Error {
 
     /// [E018] emergency_drain requires the contract to be paused first.
     NotPaused = 18,
+
+    /// [E019] The player has not approved sufficient token allowance for the contract.
+    /// Before calling `deposit`, the player must call `token.approve` to allow the
+    /// escrow contract to transfer `stake_amount` tokens on their behalf.
+    InsufficientAllowance = 19,
 }
