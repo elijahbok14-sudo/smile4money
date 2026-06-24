@@ -3,7 +3,13 @@ import '../styles/claim-burn.css';
 
 type Mode = 'claim' | 'burn';
 
-type WalletState = 'checking' | 'notInstalled' | 'disconnected' | 'connecting' | 'connected' | 'wrongNetwork';
+type WalletState =
+  | 'checking'
+  | 'notInstalled'
+  | 'disconnected'
+  | 'connecting'
+  | 'connected'
+  | 'wrongNetwork';
 
 interface ClaimBurnProps {
   walletState?: WalletState;
@@ -114,7 +120,10 @@ export function ClaimBurn({
         <div className="toggle" role="group" aria-label="Select mode">
           <button
             className={`toggle-btn${mode === 'claim' ? ' active' : ''}`}
-            onClick={() => { setMode('claim'); setStatus('idle'); }}
+            onClick={() => {
+              setMode('claim');
+              setStatus('idle');
+            }}
             aria-pressed={mode === 'claim'}
             data-testid="toggle-claim"
           >
@@ -122,7 +131,10 @@ export function ClaimBurn({
           </button>
           <button
             className={`toggle-btn${mode === 'burn' ? ' active' : ''}`}
-            onClick={() => { setMode('burn'); setStatus('idle'); }}
+            onClick={() => {
+              setMode('burn');
+              setStatus('idle');
+            }}
             aria-pressed={mode === 'burn'}
             data-testid="toggle-burn"
           >
@@ -140,16 +152,17 @@ export function ClaimBurn({
         )}
 
         <form onSubmit={handleSubmit} data-testid="claim-burn-form">
-          <label htmlFor="amount">
-            {mode === 'claim' ? 'Claim amount' : 'Burn amount'} (XLM)
-          </label>
+          <label htmlFor="amount">{mode === 'claim' ? 'Claim amount' : 'Burn amount'} (XLM)</label>
           <input
             id="amount"
             type="number"
             min="0"
             step="any"
             value={amount}
-            onChange={(e) => { setAmount(e.target.value); setStatus('idle'); }}
+            onChange={(e) => {
+              setAmount(e.target.value);
+              setStatus('idle');
+            }}
             placeholder="0.00"
             disabled={status === 'pending'}
             data-testid="amount-input"

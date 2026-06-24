@@ -114,9 +114,7 @@ describe('RegistrationForm — validation', () => {
       await user.tab();
 
       // Assert — error should be gone
-      await waitFor(() =>
-        expect(screen.queryByText(/invalid email/i)).not.toBeInTheDocument()
-      );
+      await waitFor(() => expect(screen.queryByText(/invalid email/i)).not.toBeInTheDocument());
     });
 
     it('accepts a valid email without showing an error', async () => {
@@ -146,9 +144,7 @@ describe('RegistrationForm — validation', () => {
       await user.tab();
 
       // Assert
-      expect(
-        await screen.findByText(/password must be at least/i)
-      ).toBeInTheDocument();
+      expect(await screen.findByText(/password must be at least/i)).toBeInTheDocument();
     });
 
     it('shows an error when password lacks required complexity', async () => {
@@ -161,9 +157,7 @@ describe('RegistrationForm — validation', () => {
       await user.tab();
 
       // Assert
-      expect(
-        await screen.findByText(/password must contain/i)
-      ).toBeInTheDocument();
+      expect(await screen.findByText(/password must contain/i)).toBeInTheDocument();
     });
 
     it('accepts a strong password without showing an error', async () => {
@@ -219,18 +213,14 @@ describe('RegistrationForm — validation', () => {
       await user.type(passwordInput, 'abc');
 
       // Assert — error visible while still typing
-      expect(
-        await screen.findByText(/password must be at least/i)
-      ).toBeInTheDocument();
+      expect(await screen.findByText(/password must be at least/i)).toBeInTheDocument();
 
       // Act — continue typing to meet the minimum length
       await user.type(passwordInput, 'Def1!xyz');
 
       // Assert — length error gone once requirement is met
       await waitFor(() =>
-        expect(
-          screen.queryByText(/password must be at least/i)
-        ).not.toBeInTheDocument()
+        expect(screen.queryByText(/password must be at least/i)).not.toBeInTheDocument(),
       );
     });
   });
@@ -253,8 +243,7 @@ describe('RegistrationForm — validation', () => {
     it('does not call onSubmit when the email is invalid', async () => {
       // Arrange
       const { onSubmit } = setup();
-      const { emailInput, passwordInput, confirmPasswordInput, submitButton } =
-        getFields();
+      const { emailInput, passwordInput, confirmPasswordInput, submitButton } = getFields();
 
       // Act
       await user.type(emailInput, 'bad-email');
@@ -269,8 +258,7 @@ describe('RegistrationForm — validation', () => {
     it('does not call onSubmit when passwords do not match', async () => {
       // Arrange
       const { onSubmit } = setup();
-      const { emailInput, passwordInput, confirmPasswordInput, submitButton } =
-        getFields();
+      const { emailInput, passwordInput, confirmPasswordInput, submitButton } = getFields();
 
       // Act
       await user.type(emailInput, 'player@chess.com');
@@ -285,8 +273,7 @@ describe('RegistrationForm — validation', () => {
     it('calls onSubmit exactly once when all fields are valid', async () => {
       // Arrange
       const { onSubmit } = setup();
-      const { emailInput, passwordInput, confirmPasswordInput, submitButton } =
-        getFields();
+      const { emailInput, passwordInput, confirmPasswordInput, submitButton } = getFields();
 
       // Act
       await user.type(emailInput, 'player@chess.com');
@@ -296,9 +283,7 @@ describe('RegistrationForm — validation', () => {
 
       // Assert
       await waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(1));
-      expect(onSubmit).toHaveBeenCalledWith(
-        expect.objectContaining({ email: 'player@chess.com' })
-      );
+      expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({ email: 'player@chess.com' }));
     });
   });
 
@@ -321,9 +306,7 @@ describe('RegistrationForm — validation', () => {
       await user.tab();
 
       // Assert — error gone
-      await waitFor(() =>
-        expect(screen.queryByText(/invalid email/i)).not.toBeInTheDocument()
-      );
+      await waitFor(() => expect(screen.queryByText(/invalid email/i)).not.toBeInTheDocument());
     });
 
     it('removes the password mismatch error once passwords match', async () => {
@@ -344,17 +327,14 @@ describe('RegistrationForm — validation', () => {
 
       // Assert — mismatch error gone
       await waitFor(() =>
-        expect(
-          screen.queryByText(/passwords do not match/i)
-        ).not.toBeInTheDocument()
+        expect(screen.queryByText(/passwords do not match/i)).not.toBeInTheDocument(),
       );
     });
 
     it('enables the submit button once all validation errors are resolved', async () => {
       // Arrange
       setup();
-      const { emailInput, passwordInput, confirmPasswordInput, submitButton } =
-        getFields();
+      const { emailInput, passwordInput, confirmPasswordInput, submitButton } = getFields();
 
       // Act — fill all fields correctly
       await user.type(emailInput, 'player@chess.com');
@@ -372,8 +352,7 @@ describe('RegistrationForm — validation', () => {
     it('calls onSubmit only once even when the submit button is clicked multiple times rapidly', async () => {
       // Arrange
       const { onSubmit } = setup();
-      const { emailInput, passwordInput, confirmPasswordInput, submitButton } =
-        getFields();
+      const { emailInput, passwordInput, confirmPasswordInput, submitButton } = getFields();
 
       // Act — fill valid data
       await user.type(emailInput, 'player@chess.com');
@@ -392,12 +371,9 @@ describe('RegistrationForm — validation', () => {
     it('disables the submit button after a successful submission to prevent re-submission', async () => {
       // Arrange
       // Simulate an async onSubmit that takes a moment to resolve
-      const onSubmit = vi.fn(
-        () => new Promise<void>((resolve) => setTimeout(resolve, 50))
-      );
+      const onSubmit = vi.fn(() => new Promise<void>((resolve) => setTimeout(resolve, 50)));
       render(<RegistrationForm onSubmit={onSubmit} />);
-      const { emailInput, passwordInput, confirmPasswordInput, submitButton } =
-        getFields();
+      const { emailInput, passwordInput, confirmPasswordInput, submitButton } = getFields();
 
       // Act
       await user.type(emailInput, 'player@chess.com');
