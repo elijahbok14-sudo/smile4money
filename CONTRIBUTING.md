@@ -87,6 +87,32 @@ Before submitting a PR, confirm:
 - [ ] New behaviour is covered by tests
 - [ ] No secrets or `.env` files are committed
 
+## CI Security: Action Pinning
+
+All third-party GitHub Actions used in `.github/workflows/*.yml` **must** be pinned to their full immutable commit SHA, not to a version tag. This prevents supply-chain attacks where a tag is silently moved to a malicious commit.
+
+```
+# ✅ Correct — pinned by SHA with a version comment
+- uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+
+# ❌ Incorrect — mutable tag reference
+- uses: actions/checkout@v4
+```
+
+When adding or updating an action:
+
+1. Resolve the SHA by querying the upstream repository.
+2. Use the full 40-character SHA after `@`.
+3. Append the original version as a trailing comment (e.g. `# v4`).
+
+To resolve the SHA for a tagged action:
+
+```bash
+git ls-remote https://github.com/<owner>/<repo>.git refs/tags/<tag>
+```
+
+---
+
 ## Reporting Issues
 
 Open a GitHub issue with:
