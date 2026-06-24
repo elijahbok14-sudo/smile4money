@@ -2,6 +2,38 @@
 
 This document covers end-to-end deployment of smile4money contracts to Stellar testnet and mainnet.
 
+## Verifying CI Build Artifacts
+
+Every CI build on the `master` branch uploads the compiled WASM binaries as a downloadable artifact. This allows you to verify that a deployed contract matches a specific commit's source code.
+
+### Downloading an artifact
+
+1. Navigate to the [Actions tab](https://github.com/{{repo}}/actions) on GitHub.
+2. Select the CI run for the commit you want to verify.
+3. In the **Artifacts** section, download the `wasm-<commit-sha>` archive.
+4. Extract the archive to get the `.wasm` files.
+
+### Verifying a deployed contract
+
+Compare the WASM hash from the artifact against the deployed contract:
+
+```bash
+# Download and extract the artifact for the target commit
+unzip wasm-<sha>.zip -d wasm-artifact
+
+# Compute the hash of the local artifact
+sha256sum wasm-artifact/*.wasm
+
+# On-chain: use stellar contract inspect to get the contract's WASM hash
+stellar contract inspect \
+  --id <CONTRACT_ID> \
+  --network mainnet \
+  --rpc-url https://soroban-mainnet.stellar.org \
+  --network-passphrase "Public Global Stellar Network ; September 2015"
+```
+
+The WASM hash displayed by `stellar contract inspect` should match the `sha256sum` output for the corresponding artifact file, confirming the deployed bytecode matches the source at that commit.
+
 ## Prerequisites
 
 - **Rust toolchain** (1.70+) with `wasm32-unknown-unknown` target:
