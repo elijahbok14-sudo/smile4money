@@ -1,5 +1,9 @@
 name: Deploy to Testnet
 
+concurrency:
+  group: ${{ github.ref }}
+  cancel-in-progress: true
+
 on:
   workflow_dispatch:
   push:
