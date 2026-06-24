@@ -126,12 +126,25 @@ VITE_STELLAR_NETWORK=testnet
 VITE_STELLAR_RPC_URL=https://soroban-testnet.stellar.org
 ```
 
-Network configurations are defined in `environments.toml`:
+Network configurations are defined in `environments.toml`. Each environment is a TOML section with the fields below.
 
-- `testnet` — Stellar testnet
-- `mainnet` — Stellar mainnet
-- `futurenet` — Stellar futurenet
-- `standalone` — Local development
+### `environments.toml` Field Reference
+
+| Field | Type | Required | Description | Example (testnet) |
+|---|---|---|---|---|
+| `[network]` | section | **required** | TOML section key identifying the Stellar network | `[testnet]` |
+| `network_passphrase` | string | **required** | Stellar network passphrase used for transaction signing | `"Test SDF Network ; September 2015"` |
+| `rpc_url` | string | **required** | Soroban RPC endpoint URL for the network | `"https://soroban-testnet.stellar.org"` |
+| `horizon_url` | string | optional | Horizon REST API endpoint URL (reserved for future use) | `"https://horizon-testnet.stellar.org"` |
+
+Recognized network sections:
+
+| Section | Environment |
+|---|---|
+| `[testnet]` | Stellar testnet |
+| `[mainnet]` | Stellar mainnet |
+| `[futurenet]` | Stellar futurenet |
+| `[standalone]` | Local development |
 
 ### Deploy to Testnet
 
@@ -146,6 +159,7 @@ stellar keys generate deployer --network testnet
 ## 📖 Documentation
 
 - [Architecture Overview](docs/architecture.md)
+- [Deployment Guide](docs/deployment.md)
 - [Oracle Design](docs/oracle.md)
 - [Threat Model & Security](docs/security.md)
 - [Roadmap](docs/roadmap.md)
