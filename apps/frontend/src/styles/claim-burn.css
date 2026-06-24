@@ -189,6 +189,29 @@ input:disabled {
   color: #9ca3af;
 }
 
+.input-wrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.input-wrapper input {
+  width: 100%;
+  padding-right: 3.25rem;
+}
+
+.input-currency {
+  position: absolute;
+  right: 0.75rem;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: #6b7280;
+  pointer-events: none;
+  user-select: none;
+}
+
 /* Feedback */
 .feedback {
   margin: 0.75rem 0 0;

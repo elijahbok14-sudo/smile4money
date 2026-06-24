@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import '../styles/claim-burn.css';
 
 type Mode = 'claim' | 'burn';
+type TokenType = 'XLM' | 'USDC';
 
 type WalletState =
   | 'checking'
@@ -19,6 +20,7 @@ interface ClaimBurnProps {
   onSwitchNetwork?: () => void;
   publicKey?: string | null;
   expectedNetwork?: string;
+  tokenType?: TokenType;
 }
 
 export function ClaimBurn({
@@ -29,6 +31,7 @@ export function ClaimBurn({
   onSwitchNetwork,
   publicKey,
   expectedNetwork = 'testnet',
+  tokenType = 'XLM',
 }: ClaimBurnProps) {
   const [mode, setMode] = useState<Mode>('claim');
   const [amount, setAmount] = useState('');
@@ -152,21 +155,24 @@ export function ClaimBurn({
         )}
 
         <form onSubmit={handleSubmit} data-testid="claim-burn-form">
-          <label htmlFor="amount">{mode === 'claim' ? 'Claim amount' : 'Burn amount'} (XLM)</label>
-          <input
-            id="amount"
-            type="number"
-            min="0"
-            step="any"
-            value={amount}
-            onChange={(e) => {
-              setAmount(e.target.value);
-              setStatus('idle');
-            }}
-            placeholder="0.00"
-            disabled={status === 'pending'}
-            data-testid="amount-input"
-          />
+          <label htmlFor="amount">{mode === 'claim' ? 'Claim amount' : 'Burn amount'}</label>
+          <div className="input-wrapper">
+            <input
+              id="amount"
+              type="number"
+              min="0"
+              step="any"
+              value={amount}
+              onChange={(e) => {
+                setAmount(e.target.value);
+                setStatus('idle');
+              }}
+              placeholder="0.00"
+              disabled={status === 'pending'}
+              data-testid="amount-input"
+            />
+            <span className="input-currency" data-testid="currency-label">{tokenType}</span>
+          </div>
           <button
             type="submit"
             className={`btn btn-${mode}`}
