@@ -1,3 +1,49 @@
+//! # Escrow Contract
+//!
+//! Trustless chess-match escrow on Stellar Soroban. Players stake XLM or USDC before a game;
+//! the verified winner is paid out automatically the moment the oracle submits the result.
+//!
+//! ## State Machine
+//!
+//! Every match moves through the following states. Invalid transitions are rejected on-chain
+//! with [`Error::InvalidState`].
+//!
+//! ```text
+//! (none) ──create_match()──► Pending
+//!                                │
+//!                ┌───────────────┤
+//!                │               │
+//!         cancel_match()    deposit() × 2
+//!                │               │
+//!                ▼               ▼
+//!            Cancelled        Active
+//!                           (funds held)
+//!                                │
+//!                         submit_result()
+//!                          (oracle only)
+//!                                │
+//!                                ▼
+//!                           Completed
+//!                          (payout done)
+//! ```
+//!
+//! `Cancelled` and `Completed` are **terminal** — no further transitions are possible.
+//!
+//! ## Key Data Structures
+//!
+//! - [`Match`](types::Match) — full record of a single betting match stored in persistent storage.
+//! - [`MatchState`](types::MatchState) — lifecycle enum driving the state machine above.
+//! - [`Winner`](types::Winner) — payout outcome: `Player1`, `Player2`, or `Draw`.
+//! - [`Platform`](types::Platform) — chess platform the game is hosted on (`Lichess` / `ChessDotCom`).
+//! - [`DataKey`](types::DataKey) — all storage keys used by the contract.
+//! - [`Error`](errors::Error) — every error code the contract can return.
+//!
+//! ## Further Reading
+//!
+//! - Architecture & sequence diagrams: [`docs/architecture.md`](../../docs/architecture.md)
+//! - Full API reference with CLI examples: [`docs/api-reference.md`](../../docs/api-reference.md)
+//! - Emergency procedures: [`docs/runbook.md`](../../docs/runbook.md)
+
 #![no_std]
 
 mod errors;

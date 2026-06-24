@@ -79,6 +79,83 @@ All token transfers use the Stellar Asset Contract (SAC) interface via `soroban_
 
 All persistent entries are written with a TTL of `518_400` ledgers (~30 days at 5 s/ledger). The TTL is refreshed on every state-changing write to prevent expiry during an active match.
 
+## Sequence Diagrams
+
+### Happy Path — Player 1 Wins
+
+The diagram below shows the full flow from match creation through winner payout when Player 1
+wins the game.
+
+```mermaid
+sequenceDiagram
+    actor P1 as Player 1
+    actor P2 as Player 2
+    participant EC as Escrow Contract
+    participant OC as Oracle Contract
+    participant OOS as Off-chain Oracle Service
+    participant Chess as Lichess / Chess.com API
+
+    P1->>EC: create_match(player1, player2, stake, game_id, Lichess)
+    EC-->>P1: match_id
+
+    P1->>EC: deposit(match_id, player1)
+    EC-->>P1: ok (1 of 2 deposits received)
+
+    P2->>EC: deposit(match_id, player2)
+    EC-->>P2: ok — match transitions to Active
+    EC--)EC: emit ("match", "activated")
+
+    Note over P1,P2: Players play the chess game on Lichess
+
+    Chess-->>OOS: game result available (Player 1 wins)
+    OOS->>OC: submit_result(match_id, game_id, Player1Wins)
+    OC-->>OOS: ok
+    OC--)OC: emit ("oracle", "result")
+
+    OOS->>EC: submit_result(match_id, game_id, Player1, oracle_addr)
+    EC->>EC: verify game_id match & Active state
+    EC->>P1: transfer(stake × 2)
+    EC-->>OOS: ok — match transitions to Completed
+    EC--)EC: emit ("match", "completed")
+```
+
+### Draw Path — Stakes Refunded
+
+This diagram shows the flow when the game ends in a draw. Both players receive their original
+stake back.
+
+```mermaid
+sequenceDiagram
+    actor P1 as Player 1
+    actor P2 as Player 2
+    participant EC as Escrow Contract
+    participant OC as Oracle Contract
+    participant OOS as Off-chain Oracle Service
+    participant Chess as Lichess / Chess.com API
+
+    P1->>EC: create_match(player1, player2, stake, game_id, Lichess)
+    EC-->>P1: match_id
+
+    P1->>EC: deposit(match_id, player1)
+    EC-->>P1: ok
+
+    P2->>EC: deposit(match_id, player2)
+    EC-->>P2: ok — match transitions to Active
+
+    Note over P1,P2: Players play the chess game on Lichess
+
+    Chess-->>OOS: game result available (Draw)
+    OOS->>OC: submit_result(match_id, game_id, Draw)
+    OC-->>OOS: ok
+    OC--)OC: emit ("oracle", "result")
+
+    OOS->>EC: submit_result(match_id, game_id, Draw, oracle_addr)
+    EC->>P1: transfer(stake)
+    EC->>P2: transfer(stake)
+    EC-->>OOS: ok — match transitions to Completed
+    EC--)EC: emit ("match", "completed")
+```
+
 ## Events
 
 | Contract | Topics | Data |

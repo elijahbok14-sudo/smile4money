@@ -800,6 +800,264 @@ const MAX_GAME_ID_LEN: u32   = 64;      // Maximum game_id byte length
 
 ---
 
+## Soroban CLI Invocations
+
+All examples below assume the following environment variables are set:
+
+```bash
+export NETWORK=testnet
+export CONTRACT_ESCROW=<escrow-contract-id>
+export CONTRACT_ORACLE=<oracle-contract-id>
+export TOKEN_ADDRESS=<sep41-token-contract-id>
+export ADMIN_ADDRESS=<admin-stellar-address>
+export ORACLE_ADDRESS=<oracle-stellar-address>
+export PLAYER1_ADDRESS=<player1-stellar-address>
+export PLAYER2_ADDRESS=<player2-stellar-address>
+```
+
+### Escrow Contract CLI Examples
+
+#### initialize
+
+```bash
+stellar contract invoke \
+  --id "$CONTRACT_ESCROW" \
+  --source admin-key \
+  --network "$NETWORK" \
+  -- initialize \
+  --oracle "$ORACLE_ADDRESS" \
+  --admin "$ADMIN_ADDRESS" \
+  --token "$TOKEN_ADDRESS"
+```
+
+#### pause
+
+```bash
+stellar contract invoke \
+  --id "$CONTRACT_ESCROW" \
+  --source admin-key \
+  --network "$NETWORK" \
+  -- pause
+```
+
+#### unpause
+
+```bash
+stellar contract invoke \
+  --id "$CONTRACT_ESCROW" \
+  --source admin-key \
+  --network "$NETWORK" \
+  -- unpause
+```
+
+#### update_oracle
+
+```bash
+stellar contract invoke \
+  --id "$CONTRACT_ESCROW" \
+  --source admin-key \
+  --network "$NETWORK" \
+  -- update_oracle \
+  --new_oracle "$NEW_ORACLE_ADDRESS"
+```
+
+#### create_match
+
+```bash
+stellar contract invoke \
+  --id "$CONTRACT_ESCROW" \
+  --source player1-key \
+  --network "$NETWORK" \
+  -- create_match \
+  --player1 "$PLAYER1_ADDRESS" \
+  --player2 "$PLAYER2_ADDRESS" \
+  --stake_amount 1000000000 \
+  --token "$TOKEN_ADDRESS" \
+  --game_id "lichess_abc123" \
+  --platform '{"Lichess":{}}'
+# Returns: u64 match_id
+```
+
+For Chess.com:
+
+```bash
+  --platform '{"ChessDotCom":{}}'
+```
+
+#### deposit
+
+```bash
+# Player 1 deposits
+stellar contract invoke \
+  --id "$CONTRACT_ESCROW" \
+  --source player1-key \
+  --network "$NETWORK" \
+  -- deposit \
+  --match_id 0 \
+  --player "$PLAYER1_ADDRESS"
+
+# Player 2 deposits (match transitions to Active after this)
+stellar contract invoke \
+  --id "$CONTRACT_ESCROW" \
+  --source player2-key \
+  --network "$NETWORK" \
+  -- deposit \
+  --match_id 0 \
+  --player "$PLAYER2_ADDRESS"
+```
+
+#### cancel_match
+
+```bash
+stellar contract invoke \
+  --id "$CONTRACT_ESCROW" \
+  --source player2-key \
+  --network "$NETWORK" \
+  -- cancel_match \
+  --match_id 0 \
+  --caller "$PLAYER2_ADDRESS"
+```
+
+#### submit_result (escrow)
+
+```bash
+# Player 1 wins
+stellar contract invoke \
+  --id "$CONTRACT_ESCROW" \
+  --source oracle-key \
+  --network "$NETWORK" \
+  -- submit_result \
+  --match_id 0 \
+  --game_id "lichess_abc123" \
+  --winner '{"Player1":{}}' \
+  --caller "$ORACLE_ADDRESS"
+
+# Player 2 wins
+  --winner '{"Player2":{}}'
+
+# Draw
+  --winner '{"Draw":{}}'
+```
+
+#### emergency_drain
+
+```bash
+stellar contract invoke \
+  --id "$CONTRACT_ESCROW" \
+  --source admin-key \
+  --network "$NETWORK" \
+  -- emergency_drain \
+  --to "$SAFE_COLD_WALLET_ADDRESS" \
+  --caller "$ADMIN_ADDRESS"
+```
+
+#### get_match
+
+```bash
+stellar contract invoke \
+  --id "$CONTRACT_ESCROW" \
+  --source any-key \
+  --network "$NETWORK" \
+  -- get_match \
+  --match_id 0
+```
+
+#### is_funded
+
+```bash
+stellar contract invoke \
+  --id "$CONTRACT_ESCROW" \
+  --source any-key \
+  --network "$NETWORK" \
+  -- is_funded \
+  --match_id 0
+# Returns: true | false
+```
+
+#### get_escrow_balance
+
+```bash
+stellar contract invoke \
+  --id "$CONTRACT_ESCROW" \
+  --source any-key \
+  --network "$NETWORK" \
+  -- get_escrow_balance \
+  --match_id 0
+# Returns: i128 (0, stake_amount, or 2 * stake_amount)
+```
+
+---
+
+### Oracle Contract CLI Examples
+
+#### initialize (oracle)
+
+```bash
+stellar contract invoke \
+  --id "$CONTRACT_ORACLE" \
+  --source admin-key \
+  --network "$NETWORK" \
+  -- initialize \
+  --admin "$ORACLE_ADDRESS"
+```
+
+#### submit_result (oracle)
+
+```bash
+stellar contract invoke \
+  --id "$CONTRACT_ORACLE" \
+  --source oracle-key \
+  --network "$NETWORK" \
+  -- submit_result \
+  --match_id 0 \
+  --game_id "lichess_abc123" \
+  --result '{"Player1Wins":{}}'
+
+# Other result variants:
+  --result '{"Player2Wins":{}}'
+  --result '{"Draw":{}}'
+```
+
+#### get_result
+
+```bash
+stellar contract invoke \
+  --id "$CONTRACT_ORACLE" \
+  --source any-key \
+  --network "$NETWORK" \
+  -- get_result \
+  --match_id 0
+# Returns: ResultEntry { game_id, result }
+```
+
+#### has_result
+
+```bash
+stellar contract invoke \
+  --id "$CONTRACT_ORACLE" \
+  --source any-key \
+  --network "$NETWORK" \
+  -- has_result \
+  --match_id 0
+# Returns: true | false
+```
+
+#### transfer_admin (oracle)
+
+```bash
+stellar contract invoke \
+  --id "$CONTRACT_ORACLE" \
+  --source oracle-key \
+  --network "$NETWORK" \
+  -- transfer_admin \
+  --new_admin "$NEW_ORACLE_ADDRESS"
+```
+
+---
+
+> **Keeping this document in sync:** When adding or changing a public contract function,
+> update this file in the same PR. The PR template includes a checklist item for this.
+
 ## Usage Examples
 
 ### Complete Match Flow
