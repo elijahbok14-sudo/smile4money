@@ -1,5 +1,9 @@
 name: Security Audit
 
+concurrency:
+  group: ${{ github.ref }}
+  cancel-in-progress: true
+
 on:
   push:
     branches: [ master ]
@@ -19,6 +23,16 @@ jobs:
         uses: dtolnay/rust-toolchain@master
         with:
           toolchain: 1.88.0
+
+      - name: Cache cargo
+        uses: actions/cache@v3
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-audit-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: ${{ runner.os }}-cargo-audit-
 
       - name: Install cargo-audit
         run: cargo install cargo-audit --locked --version 0.22.0
