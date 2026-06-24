@@ -109,6 +109,33 @@ jobs:
       - name: Build contracts
         run: cargo build --release --target wasm32-unknown-unknown
 
+      - name: Install wasm-opt
+        run: sudo apt-get update && sudo apt-get install -y binaryen
+
+      - name: Check WASM binary size
+        run: |
+          MAX_SIZE=$((64 * 1024))
+          FAILED=0
+          for wasm in target/wasm32-unknown-unknown/release/*.wasm; do
+            [ -f "$wasm" ] || continue
+            name=$(basename "$wasm")
+            opt="$wasm.opt"
+            if command -v wasm-opt &> /dev/null; then
+              wasm-opt -Oz "$wasm" -o "$opt" 2>/dev/null
+              size=$(stat --format=%s "$opt")
+            else
+              size=$(stat --format=%s "$wasm")
+            fi
+            echo "WASM binary size ($name): $size bytes"
+            if [ "$size" -gt "$MAX_SIZE" ]; then
+              echo "❌ $name is ${size} bytes, exceeding ${MAX_SIZE} byte limit!"
+              FAILED=1
+            else
+              echo "✅ $name is within the ${MAX_SIZE} byte limit"
+            fi
+          done
+          [ "$FAILED" -eq 0 ] || exit 1
+
   audit:
     name: Audit
     runs-on: ubuntu-latest
