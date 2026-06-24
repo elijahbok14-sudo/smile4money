@@ -48,12 +48,7 @@ describe('ClaimBurn — wallet states', () => {
 
   it('calls onSwitchNetwork when switch network button clicked', () => {
     const onSwitchNetwork = vi.fn();
-    render(
-      <ClaimBurn
-        walletState="wrongNetwork"
-        onSwitchNetwork={onSwitchNetwork}
-      />,
-    );
+    render(<ClaimBurn walletState="wrongNetwork" onSwitchNetwork={onSwitchNetwork} />);
     fireEvent.click(screen.getByTestId('switch-network-btn'));
     expect(onSwitchNetwork).toHaveBeenCalledOnce();
   });
@@ -64,12 +59,7 @@ describe('ClaimBurn — wallet states', () => {
   });
 
   it('shows wallet info when publicKey provided', () => {
-    render(
-      <ClaimBurn
-        walletState="connected"
-        publicKey="GABCDEF1234567890XYZ"
-      />,
-    );
+    render(<ClaimBurn walletState="connected" publicKey="GABCDEF1234567890XYZ" />);
     expect(screen.getByTestId('wallet-info')).toBeInTheDocument();
   });
 });
