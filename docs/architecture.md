@@ -4,36 +4,32 @@
 
 smile4money is composed of two Soroban smart contracts and an off-chain oracle service.
 
-```
-┌─────────────────────────────────────────────────────────┐
-│                        Players                          │
-│              (Stellar wallets / frontend)               │
-└────────────────────┬────────────────────────────────────┘
-                     │ create_match / deposit / cancel_match
-                     ▼
-┌─────────────────────────────────────────────────────────┐
-│               Escrow Contract (Soroban)                 │
-│  - Holds stakes in persistent storage                   │
-│  - Manages match lifecycle (Pending → Active →          │
-│    Completed / Cancelled)                               │
-│  - Executes payouts on submit_result                    │
-│  - Admin: pause / unpause                               │
-└────────────────────┬────────────────────────────────────┘
-                     │ submit_result(match_id, winner, caller)
-                     ▲
-┌─────────────────────────────────────────────────────────┐
-│               Oracle Contract (Soroban)                 │
-│  - Stores verified results keyed by match_id            │
-│  - Admin-only submit_result                             │
-│  - Emits on-chain events for indexers                   │
-└────────────────────┬────────────────────────────────────┘
-                     ▲
-┌─────────────────────────────────────────────────────────┐
-│            Off-chain Oracle Service                     │
-│  - Polls Lichess / Chess.com APIs                       │
-│  - Verifies game result against match game_id           │
-│  - Signs and submits result to Oracle Contract          │
-└─────────────────────────────────────────────────────────┘
+```mermaid
+flowchart TD
+    P1[Player1]
+    P2[Player2]
+    FE[Frontend]
+    EC[Escrow Contract<br/>Soroban]
+    OC[Oracle Contract<br/>Soroban]
+    OOS[Off-chain Oracle<br/>Service]
+    LA[Lichess API]
+    CA[Chess.com API]
+
+    P1 -->|interacts| FE
+    P2 -->|interacts| FE
+
+    FE -->|create_match<br/>deposit<br/>cancel_match| EC
+
+    OOS -->|GET /api/game/{id}| LA
+    OOS -->|GET /pub/player/{user}/games| CA
+    LA -->|game result| OOS
+    CA -->|game result| OOS
+
+    OOS -->|submit_result<br/>match_id, game_id, result| OC
+    OOS -->|submit_result<br/>match_id, game_id, winner, caller| EC
+
+    EC -->|payout<br/>stake_amount × 2| P1
+    EC -->|payout<br/>stake_amount × 2| P2
 ```
 
 ## Match Lifecycle
@@ -87,10 +83,14 @@ All persistent entries are written with a TTL of `518_400` ledgers (~30 days at 
 
 | Contract | Topics | Data |
 |----------|--------|------|
-| Escrow | `("match", "created")` | `(match_id, player1, player2, stake_amount)` |
+| Escrow | `("match", "created")` | `(match_id, player1, player2, stake_amount, game_id)` |
 | Escrow | `("match", "activated")` | `match_id` |
-| Escrow | `("match", "completed")` | `(match_id, winner)` |
-| Escrow | `("match", "cancelled")` | `match_id` |
+| Escrow | `("match", "deposit")` | `(match_id, player, stake_amount)` |
+| Escrow | `("match", "completed")` | `(match_id, winner, payout_amount)` |
+| Escrow | `("match", "cancelled")` | `(match_id, caller)` |
 | Escrow | `("admin", "paused")` | `()` |
 | Escrow | `("admin", "unpaused")` | `()` |
-| Oracle | `("oracle", "result")` | `(match_id, result)` |
+| Escrow | `("admin", "oracle")` | `new_oracle` |
+| Oracle | `("oracle", "init")` | `admin` |
+| Oracle | `("oracle", "result")` | `(match_id, result, timestamp)` |
+| Oracle | `("oracle", "adm_xfer")` | `(old_admin, new_admin)` |

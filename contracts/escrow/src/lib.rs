@@ -26,8 +26,22 @@ impl EscrowContract {
     }
 
     /// Initialize the contract with a trusted oracle address, an admin, and a default token.
-    /// Returns `Error::InvalidToken` if the token address is not a valid token contract.
-    pub fn initialize(env: Env, oracle: Address, admin: Address, token: Address) -> Result<(), Error> {
+    ///
+    /// # Panics
+    ///
+    /// Panics with `"Contract already initialized"` if called more than once.
+    /// This guard prevents an attacker from overwriting the oracle or admin
+    /// addresses after deployment (see Issue #1 / #110).
+    ///
+    /// # Errors
+    ///
+    /// Panics if `token` is not a valid SEP-41 token contract.
+    pub fn initialize(
+        env: Env,
+        oracle: Address,
+        admin: Address,
+        token: Address,
+    ) -> Result<(), Error> {
         if env.storage().instance().has(&DataKey::Oracle) {
             panic!("Contract already initialized");
         }
@@ -107,7 +121,8 @@ impl EscrowContract {
         if player1 == player2 {
             return Err(Error::InvalidPlayers);
         }
-        if game_id.len() > MAX_GAME_ID_LEN {
+        let game_id_len = game_id.len();
+        if game_id_len == 0 || game_id_len > MAX_GAME_ID_LEN {
             return Err(Error::InvalidGameId);
         }
         // Reject duplicate game_id — same game cannot be used in multiple matches
@@ -140,7 +155,7 @@ impl EscrowContract {
             player2,
             stake_amount,
             token,
-            game_id: game_id.clone(),
+            game_id,
             platform,
             state: MatchState::Pending,
             player1_deposited: false,
@@ -169,7 +184,7 @@ impl EscrowContract {
 
         env.events().publish(
             (Symbol::new(&env, "match"), symbol_short!("created")),
-            (id, m.player1.clone(), m.player2.clone(), stake_amount, m.game_id.clone()),
+            (id, m.player1, m.player2, stake_amount, m.game_id),
         );
 
         Ok(id)
@@ -260,7 +275,8 @@ impl EscrowContract {
     }
 
     /// Oracle submits the verified match result and triggers payout.
-    /// `game_id` must match the game_id stored in the match to prevent cross-match result injection.
+    /// `game_id` must match the game_id stored in the match to prevent
+    /// cross-match result injection.
     pub fn submit_result(
         env: Env,
         match_id: u64,
@@ -310,16 +326,12 @@ impl EscrowContract {
         };
 
         match winner {
-            Winner::Player1 => client.transfer(
-                &env.current_contract_address(),
-                &m.player1,
-                &payout_amount,
-            ),
-            Winner::Player2 => client.transfer(
-                &env.current_contract_address(),
-                &m.player2,
-                &payout_amount,
-            ),
+            Winner::Player1 => {
+                client.transfer(&env.current_contract_address(), &m.player1, &payout_amount)
+            }
+            Winner::Player2 => {
+                client.transfer(&env.current_contract_address(), &m.player2, &payout_amount)
+            }
             Winner::Draw => {
                 client.transfer(&env.current_contract_address(), &m.player1, &payout_amount);
                 client.transfer(&env.current_contract_address(), &m.player2, &payout_amount);
@@ -340,7 +352,8 @@ impl EscrowContract {
         );
 
         let topics = (Symbol::new(&env, "match"), symbol_short!("completed"));
-        env.events().publish(topics, (match_id, winner, payout_amount));
+        env.events()
+            .publish(topics, (match_id, winner, payout_amount));
 
         Ok(())
     }
@@ -351,10 +364,9 @@ impl EscrowContract {
     /// - If neither or only one player has deposited: the calling player's auth suffices.
     /// - If both players have deposited: both players must authorize, because cancelling
     ///   would withdraw funds that the other player has already committed.
+    ///
+    /// Cancelation is allowed while the contract is paused so players can recover funds.
     pub fn cancel_match(env: Env, match_id: u64, caller: Address) -> Result<(), Error> {
-        if Self::is_paused(&env) {
-            return Err(Error::ContractPaused);
-        }
         let mut m: Match = env
             .storage()
             .persistent()
@@ -405,7 +417,55 @@ impl EscrowContract {
 
         env.events().publish(
             (Symbol::new(&env, "match"), symbol_short!("cancelled")),
-            (match_id, caller.clone()),
+            (match_id, caller),
+        );
+
+        Ok(())
+    }
+
+    /// Drain all token holdings to a safe address — admin only, requires contract to be paused.
+    ///
+    /// This is an emergency recovery function for critical exploit scenarios. It transfers
+    /// the entire contract token balance to `to` and emits an `admin:emergency_drain` event.
+    ///
+    /// # Future enhancements
+    /// - **Time-lock**: require a delay (e.g., 24 h) between `pause()` and `emergency_drain()`
+    ///   so players can challenge a malicious admin action.
+    /// - **Multi-sig**: require M-of-N admin signatures to prevent a single compromised key
+    ///   from draining funds.
+    pub fn emergency_drain(env: Env, to: Address, caller: Address) -> Result<(), Error> {
+        let admin: Address = env
+            .storage()
+            .instance()
+            .get(&DataKey::Admin)
+            .ok_or(Error::Unauthorized)?;
+
+        if caller != admin {
+            return Err(Error::Unauthorized);
+        }
+        caller.require_auth();
+
+        if !Self::is_paused(&env) {
+            return Err(Error::NotPaused);
+        }
+
+        let token: Address = env
+            .storage()
+            .instance()
+            .get(&DataKey::Token)
+            .ok_or(Error::Unauthorized)?;
+
+        let client = token::Client::new(&env, &token);
+        let contract = env.current_contract_address();
+        let balance = client.balance(&contract);
+
+        if balance > 0 {
+            client.transfer(&contract, &to, &balance);
+        }
+
+        env.events().publish(
+            (Symbol::new(&env, "admin"), symbol_short!("drain")),
+            (balance, to, admin),
         );
 
         Ok(())

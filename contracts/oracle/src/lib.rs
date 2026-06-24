@@ -43,7 +43,8 @@ impl OracleContract {
             .ok_or(Error::Unauthorized)?;
         admin.require_auth();
 
-        if game_id.len() > MAX_GAME_ID_LEN {
+        let game_id_len = game_id.len();
+        if game_id_len == 0 || game_id_len > MAX_GAME_ID_LEN {
             return Err(Error::InvalidGameId);
         }
 
@@ -158,6 +159,21 @@ mod tests {
     }
 
     #[test]
+    fn test_submit_result_empty_game_id_fails() {
+        let (env, contract_id) = setup();
+        let client = OracleContractClient::new(&env, &contract_id);
+
+        assert_eq!(
+            client.try_submit_result(
+                &0u64,
+                &String::from_str(&env, ""),
+                &MatchResult::Player1Wins,
+            ),
+            Err(Ok(Error::InvalidGameId))
+        );
+    }
+
+    #[test]
     fn test_non_admin_cannot_submit_result() {
         let env = Env::default();
         let admin = Address::generate(&env);
@@ -167,7 +183,7 @@ mod tests {
         client.initialize(&admin);
 
         use soroban_sdk::testutils::{MockAuth, MockAuthInvoke};
-        env.set_auths(&[MockAuth {
+        env.mock_auths(&[MockAuth {
             address: &non_admin,
             invoke: &MockAuthInvoke {
                 contract: &contract_id,
@@ -180,8 +196,7 @@ mod tests {
                     .into_val(&env),
                 sub_invokes: &[],
             },
-        }
-        .into()]);
+        }]);
 
         assert!(client
             .try_submit_result(
@@ -265,7 +280,7 @@ mod tests {
         client.initialize(&admin);
 
         use soroban_sdk::testutils::{MockAuth, MockAuthInvoke};
-        env.set_auths(&[MockAuth {
+        env.mock_auths(&[MockAuth {
             address: &non_admin,
             invoke: &MockAuthInvoke {
                 contract: &contract_id,
@@ -273,8 +288,7 @@ mod tests {
                 args: (new_admin.clone(),).into_val(&env),
                 sub_invokes: &[],
             },
-        }
-        .into()]);
+        }]);
 
         assert!(client.try_transfer_admin(&new_admin).is_err());
     }
@@ -303,11 +317,6 @@ mod tests {
     /// for every possible `MatchResult` variant.
     #[test]
     fn test_oracle_submit_result_emits_event() {
-        let result_topic = vec![
-            &Env::default(), // placeholder; real env built per case
-        ];
-        let _ = result_topic; // silence unused warning; real assertions below
-
         let cases: &[(u64, MatchResult)] = &[
             (1u64, MatchResult::Player1Wins),
             (2u64, MatchResult::Player2Wins),
@@ -335,8 +344,6 @@ mod tests {
             ];
 
             let timestamp = env.ledger().timestamp();
-            let expected_data: soroban_sdk::Val =
-                (*match_id, expected_result.clone(), timestamp).into_val(&env);
 
             let events = env.events().all();
             let matched = events
@@ -345,15 +352,23 @@ mod tests {
 
             assert!(
                 matched.is_some(),
-                "No result event emitted for variant {:?}",
-                expected_result
+                "No result event emitted for variant {expected_result:?}",
             );
 
             let (_, _, actual_data) = matched.unwrap();
+            let (ev_match_id, ev_result, ev_timestamp): (u64, MatchResult, u64) =
+                soroban_sdk::TryFromVal::try_from_val(&env, &actual_data).unwrap();
             assert_eq!(
-                actual_data, expected_data,
-                "Event data mismatch for variant {:?}",
-                expected_result
+                ev_match_id, *match_id,
+                "match_id mismatch for variant {expected_result:?}",
+            );
+            assert_eq!(
+                &ev_result, expected_result,
+                "result mismatch for variant {expected_result:?}",
+            );
+            assert_eq!(
+                ev_timestamp, timestamp,
+                "timestamp mismatch for variant {expected_result:?}",
             );
         }
     }
