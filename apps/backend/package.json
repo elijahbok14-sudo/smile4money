@@ -1,0 +1,22 @@
+{
+  "name": "smile4money-oracle",
+  "version": "1.0.0",
+  "description": "Off-chain oracle service for smile4money",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "dev": "ts-node src/index.ts",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "pino": "9.6.0"
+  },
+  "devDependencies": {
+    "@types/node": "20.14.0",
+    "ts-node": "10.9.2",
+    "typescript": "5.5.2",
+    "vite": "5.3.4",
+    "vitest": "2.0.3"
+  }
+}
