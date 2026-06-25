@@ -1,3 +1,54 @@
+//! # Oracle Contract
+//!
+//! This module implements the on-chain oracle contract for the Smile4Money chess-escrow
+//! system on Stellar Soroban.
+//!
+//! ## Role in the System
+//!
+//! The oracle contract acts as the trusted bridge between off-chain chess game results
+//! and the on-chain escrow contract. The off-chain oracle service (a backend process that
+//! monitors Lichess and Chess.com APIs) calls [`submit_result`] to record a verified game
+//! outcome on-chain. The escrow contract then reads this result (or is called directly via
+//! `submit_result` on the escrow side) to determine payout.
+//!
+//! ## Relationship to the Escrow Contract
+//!
+//! ```text
+//! Off-chain Service
+//!        │
+//!        │  submit_result(match_id, game_id, result)
+//!        ▼
+//! ┌─────────────────┐       get_result(match_id)      ┌──────────────────┐
+//! │  Oracle Contract│ ──────────────────────────────► │  Escrow Contract │
+//! └─────────────────┘                                  └──────────────────┘
+//! ```
+//!
+//! The oracle contract stores results immutably (one result per match). The escrow contract
+//! validates the caller is the registered oracle address before processing any payout.
+//!
+//! ## Result Submission Flow
+//!
+//! 1. A chess game completes on Lichess or Chess.com.
+//! 2. The off-chain oracle service fetches the result from the platform API.
+//! 3. The oracle service calls [`submit_result`] with the `match_id`, `game_id`, and
+//!    the outcome (`Player1Wins`, `Player2Wins`, or `Draw`).
+//! 4. The contract validates the admin signature, checks for duplicates, and stores the
+//!    [`ResultEntry`] in persistent storage.
+//! 5. After the dispute window (defined in the escrow contract) expires, the escrow
+//!    contract processes the payout based on this stored result.
+//!
+//! ## Dispute Window
+//!
+//! Results submitted to the **escrow** contract enter a `PendingResult` state for
+//! `DISPUTE_WINDOW_LEDGERS` (~24 hours) before payout is executed. During this window
+//! the admin can call `override_result` on the escrow contract to correct an erroneous
+//! submission. See [`contracts/escrow/src/lib.rs`] for details.
+//!
+//! ## Further Reading
+//!
+//! - Full API reference with examples: [`docs/api-reference.md`](../../docs/api-reference.md)
+//! - Oracle architecture and sequence diagrams: [`docs/oracle.md`](../../docs/oracle.md)
+
 #![no_std]
 
 mod errors;
@@ -18,7 +69,19 @@ pub struct OracleContract;
 
 #[contractimpl]
 impl OracleContract {
-    /// Initialize with a trusted admin (the off-chain oracle service).
+    /// Initialize the oracle contract with a trusted admin address.
+    ///
+    /// The `admin` is the address of the off-chain oracle service that is authorised
+    /// to submit game results. This function can only be called once — subsequent calls
+    /// return [`Error::AlreadyInitialized`].
+    ///
+    /// # Arguments
+    ///
+    /// * `admin` — The Stellar address of the trusted off-chain oracle service.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`Error::AlreadyInitialized`] if the contract has already been set up.
     pub fn initialize(env: Env, admin: Address) -> Result<(), Error> {
         if env.storage().instance().has(&DataKey::Admin) {
             return Err(Error::AlreadyInitialized);
@@ -29,7 +92,28 @@ impl OracleContract {
         Ok(())
     }
 
-    /// Admin submits a verified match result on-chain.
+    /// Submit a verified chess game result on-chain.
+    ///
+    /// Called by the off-chain oracle service (`admin`) once the game outcome has been
+    /// confirmed via the chess platform API. The result is stored immutably in persistent
+    /// storage; any attempt to submit a second result for the same `match_id` is rejected.
+    ///
+    /// On the escrow contract side, this triggers the `PendingResult` dispute window before
+    /// payout is executed.
+    ///
+    /// # Arguments
+    ///
+    /// * `match_id` — The escrow match ID this result belongs to.
+    /// * `game_id`  — The platform-specific game identifier (e.g. Lichess game ID). Must be
+    ///   non-empty and at most 64 bytes.
+    /// * `result`   — The outcome: [`MatchResult::Player1Wins`], [`MatchResult::Player2Wins`],
+    ///   or [`MatchResult::Draw`].
+    ///
+    /// # Errors
+    ///
+    /// * [`Error::Unauthorized`]     — Caller is not the registered admin.
+    /// * [`Error::InvalidGameId`]    — `game_id` is empty or exceeds 64 bytes.
+    /// * [`Error::AlreadySubmitted`] — A result already exists for this `match_id`.
     pub fn submit_result(
         env: Env,
         match_id: u64,
@@ -75,6 +159,16 @@ impl OracleContract {
     }
 
     /// Retrieve the stored result for a match.
+    ///
+    /// Returns the full [`ResultEntry`] (game_id + result) for the given `match_id`.
+    ///
+    /// # Arguments
+    ///
+    /// * `match_id` — The escrow match ID to look up.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`Error::ResultNotFound`] if no result has been submitted yet.
     pub fn get_result(env: Env, match_id: u64) -> Result<ResultEntry, Error> {
         env.storage()
             .persistent()
@@ -83,11 +177,29 @@ impl OracleContract {
     }
 
     /// Check whether a result has been submitted for a match.
+    ///
+    /// Returns `true` if [`submit_result`] has been called for the given `match_id`,
+    /// `false` otherwise. Safe to call by anyone — no auth required.
+    ///
+    /// # Arguments
+    ///
+    /// * `match_id` — The escrow match ID to check.
     pub fn has_result(env: Env, match_id: u64) -> bool {
         env.storage().persistent().has(&DataKey::Result(match_id))
     }
 
-    /// Transfer admin rights to a new address. Requires current admin auth.
+    /// Transfer admin rights to a new address.
+    ///
+    /// Used to rotate the oracle service key without redeploying the contract. Requires
+    /// authorization from the current admin.
+    ///
+    /// # Arguments
+    ///
+    /// * `new_admin` — The Stellar address of the replacement oracle service.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`Error::Unauthorized`] if the current admin has not signed the transaction.
     pub fn transfer_admin(env: Env, new_admin: Address) -> Result<(), Error> {
         let admin: Address = env
             .storage()
