@@ -52,11 +52,17 @@ impl OracleContract {
             return Err(Error::AlreadySubmitted);
         }
 
+        if game_id.len() > 64 {
+            return Err(Error::InvalidGameId);
+        }
+
+        let ledger_seq = env.ledger().sequence();
         env.storage().persistent().set(
             &DataKey::Result(match_id),
             &ResultEntry {
                 game_id,
                 result: result.clone(),
+                submitted_ledger: ledger_seq,
             },
         );
         env.storage().persistent().extend_ttl(
@@ -371,5 +377,42 @@ mod tests {
                 "timestamp mismatch for variant {expected_result:?}",
             );
         }
+    }
+
+    #[test]
+    fn submit_result_long_game_id_returns_invalid() {
+        let (env, contract_id) = setup();
+        let client = OracleContractClient::new(&env, &contract_id);
+
+        let long_game_id = String::from_str(&env, &"x".repeat(65));
+
+        assert!(matches!(
+            client.try_submit_result(&1u64, &long_game_id, &MatchResult::Player1Wins),
+            Err(Ok(Error::InvalidGameId))
+        ));
+    }
+
+    #[test]
+    fn get_result_nonexistent_returns_not_found() {
+        let (env, contract_id) = setup();
+        let client = OracleContractClient::new(&env, &contract_id);
+
+        assert!(matches!(
+            client.try_get_result(&999u64),
+            Err(Ok(Error::ResultNotFound))
+        ));
+    }
+
+    #[test]
+    fn submit_result_duplicate_returns_already_submitted() {
+        let (env, contract_id) = setup();
+        let client = OracleContractClient::new(&env, &contract_id);
+
+        client.submit_result(&0u64, &String::from_str(&env, "abc123"), &MatchResult::Draw);
+
+        assert!(matches!(
+            client.try_submit_result(&0u64, &String::from_str(&env, "abc123"), &MatchResult::Draw),
+            Err(Ok(Error::AlreadySubmitted))
+        ));
     }
 }
