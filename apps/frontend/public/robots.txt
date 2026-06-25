@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://smile4money.app/sitemap.xml

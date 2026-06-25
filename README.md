@@ -32,6 +32,52 @@ This makes smile4money:
 - **Draw Handling**: Stakes are returned to both players in the event of a draw
 - **Transparent**: All escrow balances and payout history are verifiable on-chain
 
+## 🗺️ Match State Machine
+
+Every match moves through a strict set of states. Invalid transitions are rejected on-chain with `Error::InvalidState`.
+
+```
+                        create_match()
+                              │
+                              ▼
+                         ┌─────────┐
+                         │ Pending │  ◄─── initial state, no funds held
+                         └────┬────┘
+                              │
+              ┌───────────────┴───────────────┐
+              │                               │
+    deposit(player1)                   cancel_match()
+    deposit(player2)                   (either player)
+    [both must deposit]                        │
+              │                               ▼
+              ▼                         ┌───────────┐
+         ┌────────┐                     │ Cancelled │  ◄─── terminal
+         │ Active │                     └───────────┘
+         └───┬────┘                     Refunds any deposits already made
+             │
+      submit_result()
+      (oracle only)
+             │
+             ▼
+       ┌───────────┐
+       │ Completed │  ◄─── terminal
+       └───────────┘
+       Payout executed:
+         Winner → 2× stake_amount
+         Draw   → each player refunded stake_amount
+```
+
+### State Transition Rules
+
+| From | To | Trigger | Guard |
+|---|---|---|---|
+| — | `Pending` | `create_match()` | Contract not paused; valid players, stake, game_id |
+| `Pending` | `Active` | `deposit()` (second deposit) | Both `player1_deposited` and `player2_deposited` are true |
+| `Pending` | `Cancelled` | `cancel_match()` | Caller is player1 or player2 |
+| `Active` | `Completed` | `submit_result()` | Caller is the registered oracle; `game_id` matches |
+
+`Completed` and `Cancelled` are **terminal states** — once reached, no further transitions are allowed.
+
 ## 🛠️ Quick Start
 
 ### Prerequisites
@@ -80,12 +126,25 @@ VITE_STELLAR_NETWORK=testnet
 VITE_STELLAR_RPC_URL=https://soroban-testnet.stellar.org
 ```
 
-Network configurations are defined in `environments.toml`:
+Network configurations are defined in `environments.toml`. Each environment is a TOML section with the fields below.
 
-- `testnet` — Stellar testnet
-- `mainnet` — Stellar mainnet
-- `futurenet` — Stellar futurenet
-- `standalone` — Local development
+### `environments.toml` Field Reference
+
+| Field | Type | Required | Description | Example (testnet) |
+|---|---|---|---|---|
+| `[network]` | section | **required** | TOML section key identifying the Stellar network | `[testnet]` |
+| `network_passphrase` | string | **required** | Stellar network passphrase used for transaction signing | `"Test SDF Network ; September 2015"` |
+| `rpc_url` | string | **required** | Soroban RPC endpoint URL for the network | `"https://soroban-testnet.stellar.org"` |
+| `horizon_url` | string | optional | Horizon REST API endpoint URL (reserved for future use) | `"https://horizon-testnet.stellar.org"` |
+
+Recognized network sections:
+
+| Section | Environment |
+|---|---|
+| `[testnet]` | Stellar testnet |
+| `[mainnet]` | Stellar mainnet |
+| `[futurenet]` | Stellar futurenet |
+| `[standalone]` | Local development |
 
 ### Deploy to Testnet
 
@@ -100,9 +159,11 @@ stellar keys generate deployer --network testnet
 ## 📖 Documentation
 
 - [Architecture Overview](docs/architecture.md)
+- [Deployment Guide](docs/deployment.md)
 - [Oracle Design](docs/oracle.md)
 - [Threat Model & Security](docs/security.md)
 - [Roadmap](docs/roadmap.md)
+- [Contributing Guide](docs/contributing.md)
 
 ## 🎓 Smart Contract API
 
@@ -111,7 +172,7 @@ stellar keys generate deployer --network testnet
 **Initialization**
 
 ```
-initialize(oracle: Address, admin: Address)
+initialize(oracle: Address, admin: Address, token: Address)
 ```
 
 **Match Management**
