@@ -1,0 +1,69 @@
+name: Deploy to Mainnet
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - 'v*.*.*'
+
+jobs:
+  deploy:
+    name: Deploy contracts
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: 1.88.0
+          targets: wasm32-unknown-unknown
+
+      - name: Cache cargo
+        uses: actions/cache@v3
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: ${{ runner.os }}-cargo-
+
+      - name: Install Stellar CLI
+        run: |
+          curl -sSL https://github.com/stellar/stellar-cli/releases/download/v22.0.1/stellar-cli-22.0.1-x86_64-unknown-unknown-linux-gnu.tar.gz \
+            | tar -xz -C /usr/local/bin stellar
+
+      - name: Import deployer identity
+        env:
+          MAINNET_DEPLOYER_SECRET_KEY: ${{ secrets.MAINNET_DEPLOYER_SECRET_KEY }}
+        run: |
+          if [ -z "$MAINNET_DEPLOYER_SECRET_KEY" ]; then
+            echo "MAINNET_DEPLOYER_SECRET_KEY secret is not set"
+            exit 1
+          fi
+          stellar keys add deployer --secret-key "$MAINNET_DEPLOYER_SECRET_KEY"
+
+      - name: Deploy contracts
+        run: ./scripts/deploy_mainnet.sh
+
+      - name: Deployment summary
+        env:
+          CONTRACT_ID: ${{ secrets.CONTRACT_ID }}
+        run: |
+          {
+            echo "## Mainnet Deployment Summary"
+            echo "**Date:** $(date -u '+%Y-%m-%d %H:%M UTC')"
+            echo "**Commit:** ${{ github.sha }}"
+            echo "**Ref:** ${{ github.ref }}"
+            echo ""
+            echo "### Deployed Contracts"
+            if [ -f .env ]; then
+              grep -E '^(CONTRACT_ESCROW|CONTRACT_ORACLE)=' .env || echo "Contract IDs not found in .env"
+            fi
+            if [ -n "$CONTRACT_ID" ]; then
+              echo ""
+              echo "**CONTRACT_ID secret:** $CONTRACT_ID"
+            fi
+          } >> $GITHUB_STEP_SUMMARY

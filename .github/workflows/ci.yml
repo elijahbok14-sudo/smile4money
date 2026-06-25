@@ -2,28 +2,33 @@ name: CI
 
 on:
   push:
-    branches: [main, master]
+    branches: [ master ]
   pull_request:
-    branches: [main, master]
+    branches: [ master ]
 
 env:
   CARGO_TERM_COLOR: always
   RUST_BACKTRACE: 1
+
+concurrency:
+  group: ${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   test:
     name: Test
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
 
       - name: Install Rust
-        uses: dtolnay/rust-toolchain@stable
+        uses: dtolnay/rust-toolchain@67ef31d5b988238dd797d409d6f9574278e20537 # master
         with:
+          toolchain: 1.88.0
           targets: wasm32-unknown-unknown
 
       - name: Cache cargo
-        uses: actions/cache@v4
+        uses: actions/cache@6f8efc29b200d32929f49075959781ed54ec270c # v3
         with:
           path: |
             ~/.cargo/registry
@@ -33,22 +38,26 @@ jobs:
           restore-keys: ${{ runner.os }}-cargo-
 
       - name: Run tests
-        run: cargo test
+        run: cargo test --lib --verbose
+
+      - name: Run doc tests
+        run: cargo test --doc --verbose
 
   clippy:
     name: Clippy
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
 
       - name: Install Rust
-        uses: dtolnay/rust-toolchain@stable
+        uses: dtolnay/rust-toolchain@67ef31d5b988238dd797d409d6f9574278e20537 # master
         with:
+          toolchain: 1.88.0
           targets: wasm32-unknown-unknown
           components: clippy
 
       - name: Cache cargo
-        uses: actions/cache@v4
+        uses: actions/cache@6f8efc29b200d32929f49075959781ed54ec270c # v3
         with:
           path: |
             ~/.cargo/registry
@@ -58,22 +67,59 @@ jobs:
           restore-keys: ${{ runner.os }}-cargo-
 
       - name: Run clippy
-        run: cargo clippy -- -D warnings
+        run: cargo clippy --all-targets --all-features -- -D warnings
 
-  build:
-    name: Build WASM
+  fmt:
+    name: Format
     runs-on: ubuntu-latest
-    needs: [test, clippy]
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@67ef31d5b988238dd797d409d6f9574278e20537 # master
+        with:
+          toolchain: 1.88.0
+          components: rustfmt
+
+      - name: Check formatting
+        run: cargo fmt -- --check
+
+  prettier:
+    name: Prettier
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/frontend
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install Rust
-        uses: dtolnay/rust-toolchain@stable
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
         with:
+          node-version: 20
+          cache: 'npm'
+          cache-dependency-path: apps/frontend/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Check formatting
+        run: npm run format:check
+
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@67ef31d5b988238dd797d409d6f9574278e20537 # master
+        with:
+          toolchain: 1.88.0
           targets: wasm32-unknown-unknown
 
       - name: Cache cargo
-        uses: actions/cache@v4
+        uses: actions/cache@6f8efc29b200d32929f49075959781ed54ec270c # v3
         with:
           path: |
             ~/.cargo/registry
@@ -83,11 +129,58 @@ jobs:
           restore-keys: ${{ runner.os }}-cargo-
 
       - name: Build contracts
-        run: cargo build --target wasm32-unknown-unknown --release
+        run: cargo build --release --target wasm32-unknown-unknown
 
       - name: Upload WASM artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: wasm-contracts
+          name: wasm-${{ github.sha }}
           path: target/wasm32-unknown-unknown/release/*.wasm
-          retention-days: 7
+          retention-days: 30
+
+  validate-environments:
+    name: Validate environments.toml
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+
+      - name: Set up Python
+        uses: actions/setup-python@0b93645e9fea7318ecaed2b359559ac225c90a2b # v5
+        with:
+          python-version: "3.12"
+
+      - name: Validate environments.toml
+        run: python scripts/validate_environments.py
+
+      - name: Run validation tests
+        run: python scripts/test_validate_environments.py
+
+  frontend:
+    name: Frontend
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/frontend
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: "20"
+
+      - name: Cache node_modules
+        uses: actions/cache@6f8efc29b200d32929f49075959781ed54ec270c # v3
+        with:
+          path: apps/frontend/node_modules
+          key: ${{ runner.os }}-node-${{ hashFiles('apps/frontend/package-lock.json') }}
+          restore-keys: ${{ runner.os }}-node-
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Type check
+        run: tsc --noEmit
+
+      - name: Run tests
+        run: vitest run
