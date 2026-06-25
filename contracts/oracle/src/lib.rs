@@ -37,6 +37,10 @@ impl OracleContract {
             .ok_or(Error::Unauthorized)?;
         admin.require_auth();
 
+        if game_id.len() == 0 {
+            return Err(Error::InvalidGameId);
+        }
+
         if env.storage().persistent().has(&DataKey::Result(match_id)) {
             return Err(Error::AlreadySubmitted);
         }
@@ -141,6 +145,18 @@ mod tests {
         let client = OracleContractClient::new(&env, &contract_id);
         client.submit_result(&0u64, &String::from_str(&env, "abc123"), &MatchResult::Draw);
         client.submit_result(&0u64, &String::from_str(&env, "abc123"), &MatchResult::Draw);
+    }
+
+    #[test]
+    fn test_submit_result_empty_game_id_returns_invalid() {
+        let (env, contract_id) = setup();
+        let client = OracleContractClient::new(&env, &contract_id);
+        let result = client.try_submit_result(
+            &0u64,
+            &String::from_str(&env, ""),
+            &MatchResult::Player1Wins,
+        );
+        assert!(matches!(result, Err(Ok(Error::InvalidGameId))));
     }
 
     #[test]

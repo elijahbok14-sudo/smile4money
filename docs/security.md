@@ -91,6 +91,22 @@ No single party can unilaterally steal funds. The escrow contract enforces all p
 - There is no timeout mechanism to auto-cancel a match if the oracle never submits a result. Players must manually cancel a pending match to recover funds.
 - The admin `pause` function does not block `cancel_match`, so players can always recover deposits even when the contract is paused.
 
+## Secrets Management
+
+### ORACLE_SECRET_KEY
+
+The oracle service signs Stellar transactions using a private key loaded exclusively from the `ORACLE_SECRET_KEY` environment variable. This key must **never** be hardcoded in source code or committed to the repository.
+
+| Variable | Description | Required |
+|----------|-------------|----------|
+| `ORACLE_SECRET_KEY` | Stellar secret key (S…) used by the oracle to sign result submissions | Yes |
+| `LICHESS_API_TOKEN` | Lichess API token for fetching game results | Yes |
+| `CHESSDOTCOM_API_KEY` | Chess.com API key for fetching game results | Yes |
+
+The oracle service validates all required environment variables at startup and exits with a fatal log message if any are missing.
+
+**Production guidance**: Store `ORACLE_SECRET_KEY` in a secrets manager (e.g., AWS Secrets Manager, HashiCorp Vault) and inject it at runtime. Rotate the key via `update_oracle` on the escrow contract after rotation.
+
 ## Reporting Vulnerabilities
 
 Open a GitHub issue with the label `security`. For critical vulnerabilities, contact the maintainers directly before public disclosure.
