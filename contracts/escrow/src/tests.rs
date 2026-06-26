@@ -2013,3 +2013,38 @@ fn test_emergency_drain_fails_for_non_admin() {
         Err(Ok(Error::Unauthorized))
     );
 }
+
+#[test]
+fn test_cancel_match_event_refund_amounts() {
+    let (env, contract_id, _oracle, player1, player2, token, _admin) = setup();
+    let client = EscrowContractClient::new(&env, &contract_id);
+
+    let id = client.create_match(
+        &player1,
+        &player2,
+        &100,
+        &token,
+        &String::from_str(&env, "cancel_refund_ev"),
+        &Platform::Lichess,
+    );
+
+    // Only player1 deposits
+    client.deposit(&id, &player1);
+    client.cancel_match(&id, &player1);
+
+    let cancel_topics = vec![
+        &env,
+        Symbol::new(&env, "match").into_val(&env),
+        soroban_sdk::symbol_short!("cancelled").into_val(&env),
+    ];
+    let events = env.events().all();
+    let (_, _, data) = events
+        .iter()
+        .find(|(_, t, _)| *t == cancel_topics)
+        .unwrap();
+    let (ev_id, _ev_caller, p1_refund, p2_refund): (u64, Address, i128, i128) =
+        TryFromVal::try_from_val(&env, &data).unwrap();
+    assert_eq!(ev_id, id);
+    assert_eq!(p1_refund, 100);
+    assert_eq!(p2_refund, 0);
+}
