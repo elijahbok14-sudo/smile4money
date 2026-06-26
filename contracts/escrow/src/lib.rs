@@ -228,6 +228,7 @@ impl EscrowContract {
             activated_ledger: 0,
             pending_result_ledger: 0,
             pending_winner: None,
+            completed_ledger: None,
         };
 
         env.storage().persistent().set(&DataKey::Match(id), &m);
@@ -532,6 +533,7 @@ impl EscrowContract {
 
         // STATE TRANSITION: PendingResult → Completed
         m.state = MatchState::Completed;
+        m.completed_ledger = Some(env.ledger().sequence());
         env.storage()
             .persistent()
             .set(&DataKey::Match(match_id), &m);

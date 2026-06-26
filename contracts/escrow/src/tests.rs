@@ -2013,3 +2013,55 @@ fn test_emergency_drain_fails_for_non_admin() {
         Err(Ok(Error::Unauthorized))
     );
 }
+
+#[test]
+fn test_completed_ledger_set_after_finalize() {
+    use soroban_sdk::testutils::Ledger as _;
+
+    let (env, contract_id, oracle, player1, player2, token, _admin) = setup();
+    let client = EscrowContractClient::new(&env, &contract_id);
+
+    let id = client.create_match(
+        &player1,
+        &player2,
+        &100,
+        &token,
+        &String::from_str(&env, "game_cl"),
+        &Platform::Lichess,
+    );
+
+    // completed_ledger is None before the match is completed
+    assert_eq!(client.get_match(&id).completed_ledger, None);
+
+    client.deposit(&id, &player1);
+    client.deposit(&id, &player2);
+    client.submit_result(
+        &id,
+        &String::from_str(&env, "game_cl"),
+        &Winner::Player1,
+        &oracle,
+    );
+
+    // Still None — result is pending dispute window
+    assert_eq!(client.get_match(&id).completed_ledger, None);
+
+    // Advance past the dispute window (17_280 ledgers)
+    let seq = env.ledger().sequence();
+    env.ledger().set(soroban_sdk::testutils::LedgerInfo {
+        sequence_number: seq + 17_281,
+        timestamp: 0,
+        protocol_version: 22,
+        network_id: Default::default(),
+        base_reserve: 5_000_000,
+        min_temp_entry_ttl: 16,
+        min_persistent_entry_ttl: 4096,
+        max_entry_ttl: 6_312_000,
+    });
+
+    let finalize_seq = env.ledger().sequence();
+    client.finalize_result(&id);
+
+    let m = client.get_match(&id);
+    assert_eq!(m.state, MatchState::Completed);
+    assert_eq!(m.completed_ledger, Some(finalize_seq));
+}
