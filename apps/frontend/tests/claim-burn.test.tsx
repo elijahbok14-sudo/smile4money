@@ -4,13 +4,6 @@ import { describe, it, expect, vi } from 'vitest';
 import { ClaimBurn } from '../src/components/claim-burn';
 import { ToastProvider } from '../src/components/Toast';
 
-// Mock CSS import
-vi.mock('../src/styles/claim-burn.css', () => ({}));
-
-function renderWithProviders(ui: React.ReactElement) {
-  return render(<ToastProvider>{ui}</ToastProvider>);
-}
-
 describe('ClaimBurn — wallet states', () => {
   it('shows checking/connecting spinner while loading', () => {
     renderWithProviders(<ClaimBurn walletState="checking" />);
@@ -127,14 +120,20 @@ describe('ClaimBurn — confirmation flow', () => {
 });
 
 describe('ClaimBurn — submit and error handling', () => {
-  it('calls onClaim with amount after confirmation', async () => {
+  it('calls onClaim with entered amount on submit', async () => {
     const onClaim = vi.fn().mockResolvedValue(undefined);
-    renderWithProviders(<ClaimBurn walletState="connected" onClaim={onClaim} />);
-    fireEvent.change(screen.getByTestId('amount-input'), { target: { value: '10' } });
+    render(<ClaimBurn walletState="connected" onClaim={onClaim} />);
+    fireEvent.change(screen.getByTestId('amount-input'), { target: { value: '12.5' } });
     fireEvent.click(screen.getByTestId('submit-btn'));
     fireEvent.click(screen.getByTestId('confirm-btn'));
-    await waitFor(() => expect(screen.getByTestId('success-msg')).toBeInTheDocument());
-    expect(onClaim).toHaveBeenCalledWith('10');
+    await waitFor(() => expect(onClaim).toHaveBeenCalledTimes(1));
+    expect(onClaim).toHaveBeenCalledWith('12.5');
+  });
+
+  it('disables the submit button when wallet is disconnected', () => {
+    render(<ClaimBurn walletState="disconnected" />);
+    expect(screen.getByTestId('wallet-disconnected')).toBeInTheDocument();
+    expect(screen.getByTestId('submit-btn')).toBeDisabled();
   });
 
   it('calls onBurn with amount', async () => {
@@ -168,15 +167,116 @@ describe('ClaimBurn — submit and error handling', () => {
     fireEvent.change(screen.getByTestId('amount-input'), { target: { value: '20' } });
     expect(screen.queryByTestId('error-msg')).not.toBeInTheDocument();
   });
+});
 
-  it('disables submit when amount is empty', () => {
-    renderWithProviders(<ClaimBurn walletState="connected" />);
+describe('ClaimBurn — input validation', () => {
+  it('shows error and disables submit when amount is empty', () => {
+    render(<ClaimBurn walletState="connected" />);
     expect(screen.getByTestId('submit-btn')).toBeDisabled();
+    expect(screen.queryByTestId('amount-error')).not.toBeInTheDocument();
   });
 
-  it('disables submit when amount is zero', () => {
-    renderWithProviders(<ClaimBurn walletState="connected" />);
+  it('shows error and disables submit when amount is zero', () => {
+    render(<ClaimBurn walletState="connected" />);
     fireEvent.change(screen.getByTestId('amount-input'), { target: { value: '0' } });
     expect(screen.getByTestId('submit-btn')).toBeDisabled();
+    expect(screen.getByTestId('amount-error')).toBeInTheDocument();
+  });
+
+  it('shows error and disables submit when amount is negative', () => {
+    render(<ClaimBurn walletState="connected" />);
+    fireEvent.change(screen.getByTestId('amount-input'), { target: { value: '-5' } });
+    expect(screen.getByTestId('submit-btn')).toBeDisabled();
+    expect(screen.getByTestId('amount-error')).toBeInTheDocument();
+  });
+
+  it('shows error and disables submit when amount is non-numeric', () => {
+    render(<ClaimBurn walletState="connected" />);
+    fireEvent.change(screen.getByTestId('amount-input'), { target: { value: 'abc' } });
+    expect(screen.getByTestId('submit-btn')).toBeDisabled();
+    expect(screen.getByTestId('amount-error')).toBeInTheDocument();
+  });
+});
+
+describe('ClaimBurn — max balance button', () => {
+  it('renders max button when balance is provided', () => {
+    render(<ClaimBurn walletState="connected" balance="100.5" />);
+    expect(screen.getByTestId('max-btn')).toBeInTheDocument();
+  });
+
+  it('does not render max button when balance is null', () => {
+    render(<ClaimBurn walletState="connected" />);
+    expect(screen.queryByTestId('max-btn')).not.toBeInTheDocument();
+  });
+
+  it('sets amount input to balance when max button is clicked', () => {
+    render(<ClaimBurn walletState="connected" balance="50" />);
+    fireEvent.click(screen.getByTestId('max-btn'));
+    expect(screen.getByTestId('amount-input')).toHaveValue('50');
+  });
+
+  it('disables max button while pending', async () => {
+    const onClaim = vi.fn().mockResolvedValue(undefined);
+    render(<ClaimBurn walletState="connected" balance="10" onClaim={onClaim} />);
+    fireEvent.change(screen.getByTestId('amount-input'), { target: { value: '10' } });
+    fireEvent.click(screen.getByTestId('submit-btn'));
+    fireEvent.click(screen.getByTestId('confirm-btn'));
+    expect(screen.getByTestId('max-btn')).toBeDisabled();
+    await waitFor(() => expect(screen.getByTestId('success-msg')).toBeInTheDocument());
+  });
+
+  it('does not call onClaim when form is submitted while disconnected', () => {
+    const onClaim = vi.fn();
+    render(<ClaimBurn walletState="disconnected" onClaim={onClaim} />);
+    fireEvent.submit(screen.getByTestId('claim-burn-form'));
+    expect(onClaim).not.toHaveBeenCalled();
+  });
+});
+
+describe('ClaimBurn — accessibility', () => {
+  it('has aria-label on switch-network button', () => {
+    render(<ClaimBurn walletState="wrongNetwork" expectedNetwork="testnet" />);
+    expect(screen.getByTestId('switch-network-btn')).toHaveAttribute('aria-label');
+  });
+
+  it('has aria-label on retry-connect button', () => {
+    render(<ClaimBurn walletState="error" />);
+    expect(screen.getByTestId('retry-connect-btn')).toHaveAttribute('aria-label');
+  });
+
+  it('input has aria-describedby when error is shown', async () => {
+    const onClaim = vi.fn().mockRejectedValue(new Error('Transaction failed'));
+    render(<ClaimBurn walletState="connected" onClaim={onClaim} />);
+    fireEvent.change(screen.getByTestId('amount-input'), { target: { value: '10' } });
+    fireEvent.click(screen.getByTestId('submit-btn'));
+    fireEvent.click(screen.getByTestId('confirm-btn'));
+    await waitFor(() => expect(screen.getByTestId('error-msg')).toBeInTheDocument());
+    expect(screen.getByTestId('amount-input')).toHaveAttribute('aria-describedby', 'claim-burn-error');
+  });
+
+  it('confirm overlay has dialog role and aria-modal', () => {
+    render(<ClaimBurn walletState="connected" />);
+    fireEvent.change(screen.getByTestId('amount-input'), { target: { value: '10' } });
+    fireEvent.click(screen.getByTestId('submit-btn'));
+    const overlay = screen.getByTestId('confirm-overlay');
+    expect(overlay).toHaveAttribute('role', 'dialog');
+    expect(overlay).toHaveAttribute('aria-modal', 'true');
+  });
+
+  it('toggle buttons reflect state with aria-pressed', () => {
+    render(<ClaimBurn walletState="connected" />);
+    expect(screen.getByTestId('toggle-claim')).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByTestId('toggle-burn')).toHaveAttribute('aria-pressed', 'false');
+    fireEvent.click(screen.getByTestId('toggle-burn'));
+    expect(screen.getByTestId('toggle-burn')).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByTestId('toggle-claim')).toHaveAttribute('aria-pressed', 'false');
+  });
+
+  it('focus ring classes are present on submit button', () => {
+    render(<ClaimBurn walletState="connected" />);
+    const submitBtn = screen.getByTestId('submit-btn');
+    expect(submitBtn.className).toContain('focus-visible:ring-2');
+    expect(submitBtn.className).toContain('focus-visible:ring-emerald-500');
+    expect(submitBtn.className).toContain('focus-visible:ring-offset-2');
   });
 });
