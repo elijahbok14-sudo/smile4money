@@ -2013,3 +2013,99 @@ fn test_emergency_drain_fails_for_non_admin() {
         Err(Ok(Error::Unauthorized))
     );
 }
+
+// Boundary stake_amount tests for create_match (issue: fuzz boundary values)
+
+// stake_amount = 0 — explicit try_create_match variant of test_create_match_zero_stake_fails
+#[test]
+fn test_create_match_stake_zero_returns_invalid_amount() {
+    let (env, contract_id, _oracle, player1, player2, token, _admin) = setup();
+    let client = EscrowContractClient::new(&env, &contract_id);
+    assert_eq!(
+        client.try_create_match(
+            &player1,
+            &player2,
+            &0,
+            &token,
+            &String::from_str(&env, "zero_stake_boundary"),
+            &Platform::Lichess,
+        ),
+        Err(Ok(Error::InvalidAmount))
+    );
+}
+
+// stake_amount = 1 — minimum positive value; must be accepted
+#[test]
+fn test_create_match_stake_one_succeeds() {
+    let (env, contract_id, _oracle, player1, player2, token, _admin) = setup();
+    let client = EscrowContractClient::new(&env, &contract_id);
+    let id = client.create_match(
+        &player1,
+        &player2,
+        &1,
+        &token,
+        &String::from_str(&env, "min_stake_one"),
+        &Platform::Lichess,
+    );
+    assert_eq!(id, 0);
+    let m = client.get_match(&id);
+    assert_eq!(m.stake_amount, 1);
+    assert_eq!(m.state, MatchState::Pending);
+}
+
+// stake_amount = i128::MAX — positive, so create_match accepts it; no overflow guard
+// exists at match-creation time. Overflow risk surfaces later in payout calculations
+// (stake_amount * 2 in finalize_result and get_escrow_balance).
+#[test]
+fn test_create_match_stake_i128_max_succeeds() {
+    let (env, contract_id, _oracle, player1, player2, token, _admin) = setup();
+    let client = EscrowContractClient::new(&env, &contract_id);
+    let id = client.create_match(
+        &player1,
+        &player2,
+        &i128::MAX,
+        &token,
+        &String::from_str(&env, "max_stake_i128"),
+        &Platform::Lichess,
+    );
+    assert_eq!(id, 0);
+    let m = client.get_match(&id);
+    assert_eq!(m.stake_amount, i128::MAX);
+    assert_eq!(m.state, MatchState::Pending);
+}
+
+// update_oracle must be admin-only. Authorization is enforced via admin.require_auth()
+// inside the contract, so a non-admin invocation fails at the host auth level.
+#[test]
+fn test_update_oracle_by_non_admin_returns_unauthorized() {
+    use soroban_sdk::testutils::{MockAuth, MockAuthInvoke};
+
+    let env = Env::default();
+    env.mock_all_auths();
+    let admin = Address::generate(&env);
+    let non_admin = Address::generate(&env);
+    let oracle = Address::generate(&env);
+    let new_oracle = Address::generate(&env);
+    let token_addr = env
+        .register_stellar_asset_contract_v2(admin.clone())
+        .address();
+    let contract_id = env.register(EscrowContract, ());
+    let client = EscrowContractClient::new(&env, &contract_id);
+    client.initialize(&oracle, &admin, &token_addr);
+
+    // Restrict to only non_admin's auth — admin.require_auth() inside update_oracle must fail.
+    env.mock_auths(&[MockAuth {
+        address: &non_admin,
+        invoke: &MockAuthInvoke {
+            contract: &contract_id,
+            fn_name: "update_oracle",
+            args: (new_oracle.clone(),).into_val(&env),
+            sub_invokes: &[],
+        },
+    }]);
+
+    assert!(
+        client.try_update_oracle(&new_oracle).is_err(),
+        "non-admin must not be able to update the oracle"
+    );
+}
