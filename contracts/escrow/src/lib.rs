@@ -325,9 +325,14 @@ impl EscrowContract {
             );
         }
 
+        let player_label = if is_p1 {
+            symbol_short!("player1")
+        } else {
+            symbol_short!("player2")
+        };
         env.events().publish(
             (Symbol::new(&env, "match"), symbol_short!("deposit")),
-            (match_id, player, m.stake_amount),
+            (match_id, player, m.stake_amount, player_label),
         );
 
         env.storage()
