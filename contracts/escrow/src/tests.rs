@@ -840,6 +840,24 @@ fn test_is_funded_false_after_one_deposit() {
     assert!(client.is_funded(&id));
 }
 
+// Issue #818: get_escrow_balance returns stake_amount after only one deposit
+#[test]
+fn test_escrow_balance_after_single_deposit() {
+    let (env, contract_id, _oracle, player1, player2, token, _admin) = setup();
+    let client = EscrowContractClient::new(&env, &contract_id);
+
+    let id = client.create_match(
+        &player1,
+        &player2,
+        &100,
+        &token,
+        &String::from_str(&env, "single_deposit"),
+        &Platform::Lichess,
+    );
+    client.deposit(&id, &player1);
+    assert_eq!(client.get_escrow_balance(&id), 100);
+}
+
 #[test]
 fn test_escrow_balance_stages() {
     let (env, contract_id, _oracle, player1, player2, token, _admin) = setup();
