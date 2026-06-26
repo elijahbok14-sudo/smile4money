@@ -228,7 +228,7 @@ impl EscrowContract {
             activated_ledger: 0,
             pending_result_ledger: 0,
             pending_winner: None,
-            cancelled_ledger: None,
+            completed_ledger: None,
         };
 
         env.storage().persistent().set(&DataKey::Match(id), &m);
@@ -326,9 +326,14 @@ impl EscrowContract {
             );
         }
 
+        let player_label = if is_p1 {
+            symbol_short!("player1")
+        } else {
+            symbol_short!("player2")
+        };
         env.events().publish(
             (Symbol::new(&env, "match"), symbol_short!("deposit")),
-            (match_id, player, m.stake_amount),
+            (match_id, player, m.stake_amount, player_label),
         );
 
         env.storage()
@@ -533,6 +538,7 @@ impl EscrowContract {
 
         // STATE TRANSITION: PendingResult → Completed
         m.state = MatchState::Completed;
+        m.completed_ledger = Some(env.ledger().sequence());
         env.storage()
             .persistent()
             .set(&DataKey::Match(match_id), &m);
@@ -655,6 +661,8 @@ impl EscrowContract {
         }
 
         let client = token::Client::new(&env, &m.token);
+        let player1_refund: i128 = if m.player1_deposited { m.stake_amount } else { 0 };
+        let player2_refund: i128 = if m.player2_deposited { m.stake_amount } else { 0 };
         if m.player1_deposited {
             client
                 .try_transfer(&env.current_contract_address(), &m.player1, &m.stake_amount)
@@ -682,7 +690,7 @@ impl EscrowContract {
 
         env.events().publish(
             (Symbol::new(&env, "match"), symbol_short!("cancelled")),
-            (match_id, caller),
+            (match_id, caller, player1_refund, player2_refund),
         );
 
         Ok(())
