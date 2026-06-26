@@ -2013,3 +2013,29 @@ fn test_emergency_drain_fails_for_non_admin() {
         Err(Ok(Error::Unauthorized))
     );
 }
+
+// Issue #817: get_escrow_balance returns 0 after match is completed
+#[test]
+fn escrow_balance_is_zero_after_completion() {
+    let (env, contract_id, oracle, player1, player2, token, _admin) = setup();
+    let client = EscrowContractClient::new(&env, &contract_id);
+
+    let id = client.create_match(
+        &player1,
+        &player2,
+        &100,
+        &token,
+        &String::from_str(&env, "balance_after_completion"),
+        &Platform::Lichess,
+    );
+    client.deposit(&id, &player1);
+    client.deposit(&id, &player2);
+    client.submit_result(
+        &id,
+        &String::from_str(&env, "balance_after_completion"),
+        &Winner::Player1,
+        &oracle,
+    );
+
+    assert_eq!(client.get_escrow_balance(&id), 0);
+}
