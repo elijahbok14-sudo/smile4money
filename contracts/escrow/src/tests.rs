@@ -2013,3 +2013,81 @@ fn test_emergency_drain_fails_for_non_admin() {
         Err(Ok(Error::Unauthorized))
     );
 }
+
+// Issue: No test verifies the pause guard on submit_result.
+// A regression could allow oracle result submission while paused.
+#[test]
+fn submit_result_when_paused_returns_error() {
+    let (env, contract_id, oracle, player1, player2, token, _admin) = setup();
+    let client = EscrowContractClient::new(&env, &contract_id);
+
+    let id = client.create_match(
+        &player1,
+        &player2,
+        &100,
+        &token,
+        &String::from_str(&env, "pause_guard_test"),
+        &Platform::Lichess,
+    );
+    client.deposit(&id, &player1);
+    client.deposit(&id, &player2);
+
+    client.pause();
+
+    assert_eq!(
+        client.try_submit_result(
+            &id,
+            &String::from_str(&env, "pause_guard_test"),
+            &Winner::Player1,
+            &oracle,
+        ),
+        Err(Ok(Error::ContractPaused))
+    );
+}
+
+// Issue: No test verifies draw payout amounts.
+// When submit_result is called with Winner::Draw, each player must receive
+// exactly stake_amount (not stake_amount * 2).
+#[test]
+fn draw_payout_refunds_stake_to_each_player() {
+    let (env, contract_id, oracle, player1, player2, token, _admin) = setup();
+    let client = EscrowContractClient::new(&env, &contract_id);
+    let token_client = TokenClient::new(&env, &token);
+
+    let stake: i128 = 100;
+
+    // Record balances before any match activity
+    let p1_before = token_client.balance(&player1);
+    let p2_before = token_client.balance(&player2);
+
+    let id = client.create_match(
+        &player1,
+        &player2,
+        &stake,
+        &token,
+        &String::from_str(&env, "draw_refund_exact"),
+        &Platform::Lichess,
+    );
+    client.deposit(&id, &player1);
+    client.deposit(&id, &player2);
+
+    // Oracle submits draw — transitions to PendingResult (dispute window starts)
+    client.submit_result(
+        &id,
+        &String::from_str(&env, "draw_refund_exact"),
+        &Winner::Draw,
+        &oracle,
+    );
+
+    // Advance ledger past the dispute window so finalize_result is allowed
+    env.ledger().with_mut(|li| {
+        li.sequence_number += crate::DISPUTE_WINDOW_LEDGERS + 1;
+    });
+
+    client.finalize_result(&id);
+
+    // Each player must receive exactly stake_amount back — not stake_amount * 2
+    assert_eq!(token_client.balance(&player1), p1_before);
+    assert_eq!(token_client.balance(&player2), p2_before);
+    assert_eq!(client.get_escrow_balance(&id), 0);
+}
