@@ -1,5 +1,6 @@
 import { ClaimBurn } from './components/claim-burn';
 import { NetworkBadge } from './components/NetworkBadge';
+import { History } from './pages/History';
 import { useStellarWallet } from './hooks/useStellarWallet';
 import type { WalletStatus } from './types';
 
@@ -27,17 +28,24 @@ export function App() {
       <div className="mb-4">
         <NetworkBadge />
       </div>
-      <ClaimBurn
-        walletState={walletState}
-        onConnect={connect}
-        onDisconnect={disconnect}
-        onRefreshBalance={refreshBalance}
-        onClaim={handleClaim}
-        onBurn={handleBurn}
-        publicKey={address}
-        balance={balance}
-        expectedNetwork="testnet"
-      />
+      <div className="grid gap-6 lg:grid-cols-[1fr_420px]">
+        <div>
+          <ClaimBurn
+            walletState={walletState}
+            onConnect={connect}
+            onDisconnect={disconnect}
+            onRefreshBalance={refreshBalance}
+            onClaim={handleClaim}
+            onBurn={handleBurn}
+            publicKey={address}
+            balance={balance}
+            expectedNetwork="testnet"
+          />
+        </div>
+        <div>
+          <History walletState={walletState} publicKey={address} />
+        </div>
+      </div>
     </main>
   );
 }
