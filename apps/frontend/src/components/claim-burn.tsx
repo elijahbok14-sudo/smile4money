@@ -1,5 +1,8 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import type { WalletStatus } from '../types';
+import { useDebounce } from '../hooks/useDebounce';
+import { useToast } from './Toast';
+import { TxHash } from './TxHash';
 
 type Mode = 'claim' | 'burn';
 type Status = 'idle' | 'confirm' | 'pending' | 'success' | 'error';
@@ -44,13 +47,15 @@ export function ClaimBurn({
   tokenSymbol = 'XLM',
 }: ClaimBurnProps) {
   const [mode, setMode] = useState<Mode>('claim');
-  const [amount, setAmount] = useState('');
+  const [inputAmount, setInputAmount] = useState('');
+  const [confirmAmount, setConfirmAmount] = useState('');
   const [status, setStatus] = useState<Status>('idle');
   const [errorMsg, setErrorMsg] = useState('');
   const [txHash, setTxHash] = useState<string | null>(null);
 
   const amountInputRef = useRef<HTMLInputElement>(null);
   const confirmBtnRef = useRef<HTMLButtonElement>(null);
+  const toast = useToast();
 
   // Auto-dismiss success after 3s
   useEffect(() => {
@@ -80,13 +85,13 @@ export function ClaimBurn({
   }
 
   function handleAmountChange(e: React.ChangeEvent<HTMLInputElement>) {
-    setAmount(e.target.value);
+    setInputAmount(e.target.value);
     if (status === 'error' || status === 'success') resetFeedback();
   }
 
   function handleMax() {
     if (balance != null) {
-      setAmount(balance);
+      setInputAmount(balance);
       resetFeedback();
     }
   }
@@ -114,18 +119,25 @@ export function ClaimBurn({
     setTxHash(null);
     try {
       const action = mode === 'claim' ? onClaim : onBurn;
-      const hash = await action?.(amount);
+      const hash = await action?.(confirmAmount);
       if (hash) setTxHash(hash);
       setStatus('success');
-      setAmount('');
+      setInputAmount('');
+      toast.success(
+        mode === 'claim' ? `${tokenSymbol} claimed successfully!` : `${tokenSymbol} burned successfully!`,
+        hash ? `Transaction hash: ${hash}` : undefined,
+      );
     } catch (err) {
+      const message = err instanceof Error ? err.message : 'Transaction failed';
       setStatus('error');
-      setErrorMsg(err instanceof Error ? err.message : 'Transaction failed');
+      setErrorMsg(message);
+      toast.error('Transaction failed', message);
     }
-  }, [mode, onClaim, onBurn, amount]);
+  }, [mode, onClaim, onBurn, confirmAmount, toast, tokenSymbol]);
 
   function handleCancel() {
     setStatus('idle');
+    setConfirmAmount('');
     setTimeout(() => amountInputRef.current?.focus(), 0);
   }
 
@@ -395,7 +407,7 @@ export function ClaimBurn({
               type="number"
               min="0"
               step="any"
-              value={amount}
+              value={inputAmount}
               onChange={handleAmountChange}
               disabled={isPending}
               placeholder="0.00"
