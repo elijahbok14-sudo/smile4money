@@ -3,9 +3,6 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { describe, it, expect, vi } from 'vitest';
 import { ClaimBurn } from '../src/components/claim-burn';
 
-// Mock CSS import
-vi.mock('../src/styles/claim-burn.css', () => ({}));
-
 describe('ClaimBurn — wallet states', () => {
   it('shows checking/connecting spinner while loading', () => {
     render(<ClaimBurn walletState="checking" />);
@@ -163,15 +160,61 @@ describe('ClaimBurn — submit and error handling', () => {
     fireEvent.change(screen.getByTestId('amount-input'), { target: { value: '20' } });
     expect(screen.queryByTestId('error-msg')).not.toBeInTheDocument();
   });
+});
 
-  it('disables submit when amount is empty', () => {
+describe('ClaimBurn — input validation', () => {
+  it('shows error and disables submit when amount is empty', () => {
     render(<ClaimBurn walletState="connected" />);
     expect(screen.getByTestId('submit-btn')).toBeDisabled();
+    expect(screen.queryByTestId('amount-error')).not.toBeInTheDocument();
   });
 
-  it('disables submit when amount is zero', () => {
+  it('shows error and disables submit when amount is zero', () => {
     render(<ClaimBurn walletState="connected" />);
     fireEvent.change(screen.getByTestId('amount-input'), { target: { value: '0' } });
     expect(screen.getByTestId('submit-btn')).toBeDisabled();
+    expect(screen.getByTestId('amount-error')).toBeInTheDocument();
+  });
+
+  it('shows error and disables submit when amount is negative', () => {
+    render(<ClaimBurn walletState="connected" />);
+    fireEvent.change(screen.getByTestId('amount-input'), { target: { value: '-5' } });
+    expect(screen.getByTestId('submit-btn')).toBeDisabled();
+    expect(screen.getByTestId('amount-error')).toBeInTheDocument();
+  });
+
+  it('shows error and disables submit when amount is non-numeric', () => {
+    render(<ClaimBurn walletState="connected" />);
+    fireEvent.change(screen.getByTestId('amount-input'), { target: { value: 'abc' } });
+    expect(screen.getByTestId('submit-btn')).toBeDisabled();
+    expect(screen.getByTestId('amount-error')).toBeInTheDocument();
+  });
+});
+
+describe('ClaimBurn — max balance button', () => {
+  it('renders max button when balance is provided', () => {
+    render(<ClaimBurn walletState="connected" balance="100.5" />);
+    expect(screen.getByTestId('max-btn')).toBeInTheDocument();
+  });
+
+  it('does not render max button when balance is null', () => {
+    render(<ClaimBurn walletState="connected" />);
+    expect(screen.queryByTestId('max-btn')).not.toBeInTheDocument();
+  });
+
+  it('sets amount input to balance when max button is clicked', () => {
+    render(<ClaimBurn walletState="connected" balance="50" />);
+    fireEvent.click(screen.getByTestId('max-btn'));
+    expect(screen.getByTestId('amount-input')).toHaveValue('50');
+  });
+
+  it('disables max button while pending', async () => {
+    const onClaim = vi.fn().mockResolvedValue(undefined);
+    render(<ClaimBurn walletState="connected" balance="10" onClaim={onClaim} />);
+    fireEvent.change(screen.getByTestId('amount-input'), { target: { value: '10' } });
+    fireEvent.click(screen.getByTestId('submit-btn'));
+    fireEvent.click(screen.getByTestId('confirm-btn'));
+    expect(screen.getByTestId('max-btn')).toBeDisabled();
+    await waitFor(() => expect(screen.getByTestId('success-msg')).toBeInTheDocument());
   });
 });
