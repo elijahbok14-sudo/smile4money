@@ -2013,3 +2013,23 @@ fn test_emergency_drain_fails_for_non_admin() {
         Err(Ok(Error::Unauthorized))
     );
 }
+
+#[test]
+fn test_create_match_valid_platforms_accepted() {
+    // Both known Platform variants must be accepted by create_match.
+    // This test verifies the platform validation guard does not reject valid values.
+    let (env, contract_id, _oracle, player1, player2, token, _admin) = setup();
+    let client = EscrowContractClient::new(&env, &contract_id);
+
+    let id1 = client.create_match(
+        &player1, &player2, &100, &token,
+        &String::from_str(&env, "lichess-game-1"), &Platform::Lichess,
+    );
+    assert_eq!(client.get_match(&id1).platform, Platform::Lichess);
+
+    let id2 = client.create_match(
+        &player1, &player2, &100, &token,
+        &String::from_str(&env, "chessdotcom-game-1"), &Platform::ChessDotCom,
+    );
+    assert_eq!(client.get_match(&id2).platform, Platform::ChessDotCom);
+}

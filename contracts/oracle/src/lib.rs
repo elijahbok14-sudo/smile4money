@@ -412,6 +412,31 @@ mod tests {
     }
 
     #[test]
+    fn transfer_admin_by_non_admin_is_rejected() {
+        let env = Env::default();
+        let admin = Address::generate(&env);
+        let non_admin = Address::generate(&env);
+        let new_admin = Address::generate(&env);
+        let contract_id = env.register(OracleContract, ());
+        let client = OracleContractClient::new(&env, &contract_id);
+        client.initialize(&admin);
+
+        use soroban_sdk::testutils::{MockAuth, MockAuthInvoke};
+        env.mock_auths(&[MockAuth {
+            address: &non_admin,
+            invoke: &MockAuthInvoke {
+                contract: &contract_id,
+                fn_name: "transfer_admin",
+                args: (new_admin.clone(),).into_val(&env),
+                sub_invokes: &[],
+            },
+        }]);
+
+        // Auth failure from require_auth() surfaces as a host error (Err variant).
+        assert!(client.try_transfer_admin(&new_admin).is_err());
+    }
+
+    #[test]
     fn test_initialize_emits_event() {
         let env = Env::default();
         env.mock_all_auths();
