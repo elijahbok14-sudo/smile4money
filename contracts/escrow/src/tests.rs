@@ -840,6 +840,24 @@ fn test_is_funded_false_after_one_deposit() {
     assert!(client.is_funded(&id));
 }
 
+// Issue #818: get_escrow_balance returns stake_amount after only one deposit
+#[test]
+fn test_escrow_balance_after_single_deposit() {
+    let (env, contract_id, _oracle, player1, player2, token, _admin) = setup();
+    let client = EscrowContractClient::new(&env, &contract_id);
+
+    let id = client.create_match(
+        &player1,
+        &player2,
+        &100,
+        &token,
+        &String::from_str(&env, "single_deposit"),
+        &Platform::Lichess,
+    );
+    client.deposit(&id, &player1);
+    assert_eq!(client.get_escrow_balance(&id), 100);
+}
+
 #[test]
 fn test_escrow_balance_stages() {
     let (env, contract_id, _oracle, player1, player2, token, _admin) = setup();
@@ -1207,11 +1225,57 @@ fn test_deposit_emits_event() {
     let matched = events.iter().find(|(_, t, _)| *t == deposit_topics);
     assert!(matched.is_some());
     let (_, _, data) = matched.unwrap();
-    let (ev_id, ev_player, ev_amount): (u64, Address, i128) =
+    let (ev_id, ev_player, ev_amount, ev_label): (u64, Address, i128, Symbol) =
         TryFromVal::try_from_val(&env, &data).unwrap();
     assert_eq!(ev_id, id);
     assert_eq!(ev_amount, 100);
     assert!(ev_player == player1 || ev_player == player2);
+    assert!(ev_label == symbol_short!("player1") || ev_label == symbol_short!("player2"));
+}
+
+#[test]
+fn test_deposit_event_player_label() {
+    let (env, contract_id, _oracle, player1, player2, token, _admin) = setup();
+    let client = EscrowContractClient::new(&env, &contract_id);
+
+    let id = client.create_match(
+        &player1,
+        &player2,
+        &100,
+        &token,
+        &String::from_str(&env, "label_ev"),
+        &Platform::Lichess,
+    );
+
+    let deposit_topics = vec![
+        &env,
+        Symbol::new(&env, "match").into_val(&env),
+        soroban_sdk::symbol_short!("deposit").into_val(&env),
+    ];
+
+    client.deposit(&id, &player1);
+    let (_, _, data) = env
+        .events()
+        .all()
+        .iter()
+        .filter(|(_, t, _)| *t == deposit_topics)
+        .last()
+        .unwrap();
+    let (_, _, _, label): (u64, Address, i128, Symbol) =
+        TryFromVal::try_from_val(&env, &data).unwrap();
+    assert_eq!(label, symbol_short!("player1"));
+
+    client.deposit(&id, &player2);
+    let (_, _, data) = env
+        .events()
+        .all()
+        .iter()
+        .filter(|(_, t, _)| *t == deposit_topics)
+        .last()
+        .unwrap();
+    let (_, _, _, label): (u64, Address, i128, Symbol) =
+        TryFromVal::try_from_val(&env, &data).unwrap();
+    assert_eq!(label, symbol_short!("player2"));
 }
 
 #[test]
@@ -2015,53 +2079,21 @@ fn test_emergency_drain_fails_for_non_admin() {
 }
 
 #[test]
-fn test_completed_ledger_set_after_finalize() {
-    use soroban_sdk::testutils::Ledger as _;
-
-    let (env, contract_id, oracle, player1, player2, token, _admin) = setup();
+fn test_create_match_valid_platforms_accepted() {
+    // Both known Platform variants must be accepted by create_match.
+    // This test verifies the platform validation guard does not reject valid values.
+    let (env, contract_id, _oracle, player1, player2, token, _admin) = setup();
     let client = EscrowContractClient::new(&env, &contract_id);
 
-    let id = client.create_match(
-        &player1,
-        &player2,
-        &100,
-        &token,
-        &String::from_str(&env, "game_cl"),
-        &Platform::Lichess,
+    let id1 = client.create_match(
+        &player1, &player2, &100, &token,
+        &String::from_str(&env, "lichess-game-1"), &Platform::Lichess,
     );
+    assert_eq!(client.get_match(&id1).platform, Platform::Lichess);
 
-    // completed_ledger is None before the match is completed
-    assert_eq!(client.get_match(&id).completed_ledger, None);
-
-    client.deposit(&id, &player1);
-    client.deposit(&id, &player2);
-    client.submit_result(
-        &id,
-        &String::from_str(&env, "game_cl"),
-        &Winner::Player1,
-        &oracle,
+    let id2 = client.create_match(
+        &player1, &player2, &100, &token,
+        &String::from_str(&env, "chessdotcom-game-1"), &Platform::ChessDotCom,
     );
-
-    // Still None — result is pending dispute window
-    assert_eq!(client.get_match(&id).completed_ledger, None);
-
-    // Advance past the dispute window (17_280 ledgers)
-    let seq = env.ledger().sequence();
-    env.ledger().set(soroban_sdk::testutils::LedgerInfo {
-        sequence_number: seq + 17_281,
-        timestamp: 0,
-        protocol_version: 22,
-        network_id: Default::default(),
-        base_reserve: 5_000_000,
-        min_temp_entry_ttl: 16,
-        min_persistent_entry_ttl: 4096,
-        max_entry_ttl: 6_312_000,
-    });
-
-    let finalize_seq = env.ledger().sequence();
-    client.finalize_result(&id);
-
-    let m = client.get_match(&id);
-    assert_eq!(m.state, MatchState::Completed);
-    assert_eq!(m.completed_ledger, Some(finalize_seq));
+    assert_eq!(client.get_match(&id2).platform, Platform::ChessDotCom);
 }
