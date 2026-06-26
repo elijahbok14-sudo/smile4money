@@ -228,6 +228,7 @@ impl EscrowContract {
             activated_ledger: 0,
             pending_result_ledger: 0,
             pending_winner: None,
+            cancelled_ledger: None,
         };
 
         env.storage().persistent().set(&DataKey::Match(id), &m);
@@ -655,14 +656,21 @@ impl EscrowContract {
 
         let client = token::Client::new(&env, &m.token);
         if m.player1_deposited {
-            client.transfer(&env.current_contract_address(), &m.player1, &m.stake_amount);
+            client
+                .try_transfer(&env.current_contract_address(), &m.player1, &m.stake_amount)
+                .map_err(|_| Error::TransferFailed)?
+                .map_err(|_| Error::TransferFailed)?;
         }
         if m.player2_deposited {
-            client.transfer(&env.current_contract_address(), &m.player2, &m.stake_amount);
+            client
+                .try_transfer(&env.current_contract_address(), &m.player2, &m.stake_amount)
+                .map_err(|_| Error::TransferFailed)?
+                .map_err(|_| Error::TransferFailed)?;
         }
 
         // STATE TRANSITION: Pending → Cancelled
         m.state = MatchState::Cancelled;
+        m.cancelled_ledger = Some(env.ledger().sequence());
         env.storage()
             .persistent()
             .set(&DataKey::Match(match_id), &m);

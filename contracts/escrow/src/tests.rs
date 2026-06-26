@@ -2013,3 +2013,80 @@ fn test_emergency_drain_fails_for_non_admin() {
         Err(Ok(Error::Unauthorized))
     );
 }
+
+// ── #805: cancelled_ledger field ─────────────────────────────────────────────
+
+#[test]
+fn test_cancelled_ledger_set_on_cancel() {
+    let (env, contract_id, _oracle, player1, player2, token, _admin) = setup();
+    let client = EscrowContractClient::new(&env, &contract_id);
+
+    let id = client.create_match(
+        &player1,
+        &player2,
+        &100,
+        &token,
+        &String::from_str(&env, "cancel_ledger_test"),
+        &Platform::Lichess,
+    );
+    assert_eq!(client.get_match(&id).cancelled_ledger, None);
+
+    let ledger_before = env.ledger().sequence();
+    client.cancel_match(&id, &player1);
+
+    let m = client.get_match(&id);
+    assert_eq!(m.state, MatchState::Cancelled);
+    assert_eq!(m.cancelled_ledger, Some(ledger_before));
+}
+
+#[test]
+fn test_cancelled_ledger_none_on_active_match() {
+    let (env, contract_id, _oracle, player1, player2, token, _admin) = setup();
+    let client = EscrowContractClient::new(&env, &contract_id);
+
+    let id = client.create_match(
+        &player1,
+        &player2,
+        &100,
+        &token,
+        &String::from_str(&env, "active_no_cancel_ledger"),
+        &Platform::Lichess,
+    );
+    client.deposit(&id, &player1);
+    client.deposit(&id, &player2);
+
+    assert_eq!(client.get_match(&id).cancelled_ledger, None);
+}
+
+// ── #808: try_transfer in cancel_match ───────────────────────────────────────
+
+#[test]
+fn test_cancel_refund_transfer_failed_returns_error() {
+    // Set up a match where player1 has deposited but the contract has zero balance
+    // (simulated by draining the contract balance via emergency_drain before cancel).
+    let (env, contract_id, _oracle, player1, player2, token, admin) = setup();
+    let client = EscrowContractClient::new(&env, &contract_id);
+    let token_client = TokenClient::new(&env, &token);
+
+    let id = client.create_match(
+        &player1,
+        &player2,
+        &100,
+        &token,
+        &String::from_str(&env, "transfer_fail_test"),
+        &Platform::Lichess,
+    );
+    client.deposit(&id, &player1);
+
+    // Drain the contract's token balance so the refund transfer will fail.
+    client.pause();
+    let safe = Address::generate(&env);
+    client.emergency_drain(&safe, &admin);
+    assert_eq!(token_client.balance(&contract_id), 0);
+
+    // cancel_match should now return TransferFailed instead of panicking.
+    assert_eq!(
+        client.try_cancel_match(&id, &player1),
+        Err(Ok(Error::TransferFailed))
+    );
+}
