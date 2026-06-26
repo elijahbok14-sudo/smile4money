@@ -94,7 +94,18 @@ export function ClaimBurn({
 
   function handleRequestSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    if (!isValidAmount(amount)) return;
+    if (!isValidAmount(amount)) {
+      setStatus('error');
+      setErrorMsg('Please enter a valid amount greater than 0.');
+      setTxHash(null);
+      return;
+    }
+    if (walletState !== 'connected') {
+      setStatus('error');
+      setErrorMsg('Connect your wallet to continue.');
+      setTxHash(null);
+      return;
+    }
     setStatus('confirm');
   }
 
@@ -118,6 +129,10 @@ export function ClaimBurn({
     setStatus('idle');
     setTimeout(() => amountInputRef.current?.focus(), 0);
   }
+
+  const isPending = status === 'pending';
+  const showConfirm = status === 'confirm';
+  const valid = isValidAmount(amount);
 
   // ── Wallet state screens ──────────────────────────────────────────
 
@@ -148,19 +163,65 @@ export function ClaimBurn({
 
   if (walletState === 'disconnected') {
     return (
-      <div className="wallet-state" data-testid="wallet-disconnected">
-        <span className="wallet-state-icon">💼</span>
-        <h3 className="wallet-state-title">Connect Your Wallet</h3>
-        <p className="wallet-state-message">
-          Connect your Freighter wallet to claim rewards or burn tokens.
-        </p>
-        <button
-          className="btn btn-connect"
-          onClick={onConnect}
-          data-testid="connect-wallet-btn"
+      <div className="claim-burn" data-testid="wallet-disconnected">
+        <h2 className="claim-burn-title">Claim &amp; Burn</h2>
+        <div className="wallet-state" data-testid="wallet-disconnected-state">
+          <span className="wallet-state-icon">💼</span>
+          <h3 className="wallet-state-title">Connect Your Wallet</h3>
+          <p className="wallet-state-message">
+            Connect your Freighter wallet to claim rewards or burn tokens.
+          </p>
+          <button
+            className="btn btn-connect focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-2"
+            onClick={onConnect}
+            data-testid="connect-wallet-btn"
+            aria-label="Connect wallet"
+          >
+            Connect Wallet
+          </button>
+        </div>
+        <form
+          onSubmit={handleRequestSubmit}
+          data-testid="claim-burn-form"
+          aria-label={`${mode === 'claim' ? 'Claim' : 'Burn'} tokens`}
         >
-          Connect Wallet
-        </button>
+          <div className="form-group">
+            <label htmlFor="amount-input">Amount ({tokenSymbol})</label>
+            <div className="input-row">
+              <input
+                ref={amountInputRef}
+                id="amount-input"
+                type="number"
+                min="0"
+                step="any"
+                value={amount}
+                onChange={handleAmountChange}
+                disabled
+                placeholder="0.00"
+                data-testid="amount-input"
+                aria-invalid={amount !== '' && !valid}
+                aria-label={`${mode === 'claim' ? 'Claim' : 'Burn'} amount`}
+                aria-describedby={status === 'error' ? 'claim-burn-error' : undefined}
+                className="focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-2"
+              />
+            </div>
+          </div>
+          <button
+            type="submit"
+            className={`btn btn-${mode} focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-2`}
+            disabled={true}
+            data-testid="submit-btn"
+            aria-busy={isPending}
+            aria-label={`${mode === 'claim' ? 'Claim' : 'Burn'} disabled until wallet is connected`}
+          >
+            {mode === 'claim' ? 'Claim' : 'Burn'}
+          </button>
+        </form>
+        {status === 'error' && (
+          <p className="feedback error" role="alert" data-testid="error-msg" id="claim-burn-error">
+            {errorMsg}
+          </p>
+        )}
       </div>
     );
   }
@@ -178,6 +239,7 @@ export function ClaimBurn({
           className="btn btn-switch-network"
           onClick={onSwitchNetwork}
           data-testid="switch-network-btn"
+          aria-label={`Switch to ${expectedNetwork} network`}
         >
           Switch to {expectedNetwork}
         </button>
@@ -197,6 +259,7 @@ export function ClaimBurn({
           className="btn btn-connect"
           onClick={onConnect}
           data-testid="retry-connect-btn"
+          aria-label="Retry wallet connection"
         >
           Try Again
         </button>
@@ -206,10 +269,6 @@ export function ClaimBurn({
 
   // ── Connected UI ──────────────────────────────────────────────────
 
-  const isPending = status === 'pending';
-  const showConfirm = status === 'confirm';
-  const valid = isValidAmount(amount);
-
   return (
     <div className="claim-burn" data-testid="claim-burn">
       <h2 className="claim-burn-title">Claim &amp; Burn</h2>
@@ -218,19 +277,21 @@ export function ClaimBurn({
       <div className="toggle" role="group" aria-label="Select mode">
         <button
           type="button"
-          className={`toggle-btn${mode === 'claim' ? ' active' : ''}`}
+          className={`toggle-btn${mode === 'claim' ? ' active' : ''} focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-2`}
           onClick={() => handleToggle('claim')}
           aria-pressed={mode === 'claim'}
           data-testid="toggle-claim"
+          aria-label="Switch to claim mode"
         >
           Claim
         </button>
         <button
           type="button"
-          className={`toggle-btn${mode === 'burn' ? ' active' : ''}`}
+          className={`toggle-btn${mode === 'burn' ? ' active' : ''} focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-2`}
           onClick={() => handleToggle('burn')}
           aria-pressed={mode === 'burn'}
           data-testid="toggle-burn"
+          aria-label="Switch to burn mode"
         >
           Burn
         </button>
@@ -246,9 +307,10 @@ export function ClaimBurn({
             </span>
             {onDisconnect && (
               <button
-                className="btn-disconnect"
+                className="btn-disconnect focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-2"
                 onClick={onDisconnect}
                 data-testid="disconnect-btn"
+                aria-label="Disconnect wallet"
               >
                 Disconnect
               </button>
@@ -294,18 +356,20 @@ export function ClaimBurn({
           <div className="confirm-buttons">
             <button
               type="button"
-              className="btn btn-cancel"
+              className="btn btn-cancel focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-2"
               onClick={handleCancel}
               data-testid="cancel-btn"
+              aria-label="Cancel confirmation"
             >
               Cancel
             </button>
             <button
               ref={confirmBtnRef}
               type="button"
-              className={`btn btn-${mode}`}
+              className={`btn btn-${mode} focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-2`}
               onClick={handleConfirm}
               data-testid="confirm-btn"
+              aria-label={`Confirm ${mode}`}
             >
               Confirm
             </button>
@@ -334,11 +398,14 @@ export function ClaimBurn({
               placeholder="0.00"
               data-testid="amount-input"
               aria-invalid={amount !== '' && !valid}
+              aria-label={`${mode === 'claim' ? 'Claim' : 'Burn'} amount`}
+              aria-describedby={status === 'error' ? 'claim-burn-error' : undefined}
+              className="focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-2"
             />
             {mode === 'burn' && balance != null && (
               <button
                 type="button"
-                className="btn-max"
+                className="btn-max focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-2"
                 onClick={handleMax}
                 disabled={isPending}
                 data-testid="max-btn"
@@ -353,10 +420,11 @@ export function ClaimBurn({
         {!showConfirm && (
           <button
             type="submit"
-            className={`btn btn-${mode}`}
-            disabled={isPending || !valid}
+            className={`btn btn-${mode} focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-2`}
+            disabled={isPending || !valid || walletState !== 'connected'}
             data-testid="submit-btn"
             aria-busy={isPending}
+            aria-label={`${mode === 'claim' ? 'Claim' : 'Burn'} tokens`}
           >
             {isPending
               ? mode === 'claim' ? 'Claiming…' : 'Burning…'
@@ -379,7 +447,7 @@ export function ClaimBurn({
         </p>
       )}
       {status === 'error' && (
-        <p className="feedback error" role="alert" data-testid="error-msg">
+        <p className="feedback error" role="alert" data-testid="error-msg" id="claim-burn-error">
           {errorMsg}
         </p>
       )}
