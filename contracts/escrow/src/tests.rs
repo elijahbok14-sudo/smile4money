@@ -2013,3 +2013,34 @@ fn test_emergency_drain_fails_for_non_admin() {
         Err(Ok(Error::Unauthorized))
     );
 }
+
+// Issue: No test verifies the pause guard on submit_result.
+// A regression could allow oracle result submission while paused.
+#[test]
+fn submit_result_when_paused_returns_error() {
+    let (env, contract_id, oracle, player1, player2, token, _admin) = setup();
+    let client = EscrowContractClient::new(&env, &contract_id);
+
+    let id = client.create_match(
+        &player1,
+        &player2,
+        &100,
+        &token,
+        &String::from_str(&env, "pause_guard_test"),
+        &Platform::Lichess,
+    );
+    client.deposit(&id, &player1);
+    client.deposit(&id, &player2);
+
+    client.pause();
+
+    assert_eq!(
+        client.try_submit_result(
+            &id,
+            &String::from_str(&env, "pause_guard_test"),
+            &Winner::Player1,
+            &oracle,
+        ),
+        Err(Ok(Error::ContractPaused))
+    );
+}
