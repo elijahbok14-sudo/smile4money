@@ -20,4 +20,6 @@ pub enum Error {
     GameIdMismatch = 13,
     /// game_id already used in another match
     DuplicateGameId = 14,
+    /// platform value does not match a known variant
+    InvalidPlatform = 15,
 }

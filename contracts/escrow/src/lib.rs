@@ -104,6 +104,9 @@ impl EscrowContract {
         if game_id.len() > MAX_GAME_ID_LEN {
             return Err(Error::InvalidGameId);
         }
+        if !matches!(platform, Platform::Lichess | Platform::ChessDotCom) {
+            return Err(Error::InvalidPlatform);
+        }
         // Reject duplicate game_id — same game cannot be used in multiple matches
         if env
             .storage()
