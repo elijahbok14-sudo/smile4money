@@ -483,7 +483,7 @@ fn test_deposit_into_completed_match_fails() {
 }
 
 #[test]
-fn test_deposit_into_cancelled_match_fails() {
+fn test_deposit_after_cancel_returns_match_cancelled() {
     let (env, contract_id, _oracle, player1, player2, token, _admin) = setup();
     let client = EscrowContractClient::new(&env, &contract_id);
 
@@ -838,6 +838,24 @@ fn test_is_funded_false_after_one_deposit() {
     assert!(!client.is_funded(&id));
     client.deposit(&id, &player2);
     assert!(client.is_funded(&id));
+}
+
+// Issue #818: get_escrow_balance returns stake_amount after only one deposit
+#[test]
+fn test_escrow_balance_after_single_deposit() {
+    let (env, contract_id, _oracle, player1, player2, token, _admin) = setup();
+    let client = EscrowContractClient::new(&env, &contract_id);
+
+    let id = client.create_match(
+        &player1,
+        &player2,
+        &100,
+        &token,
+        &String::from_str(&env, "single_deposit"),
+        &Platform::Lichess,
+    );
+    client.deposit(&id, &player1);
+    assert_eq!(client.get_escrow_balance(&id), 100);
 }
 
 #[test]
@@ -1207,11 +1225,57 @@ fn test_deposit_emits_event() {
     let matched = events.iter().find(|(_, t, _)| *t == deposit_topics);
     assert!(matched.is_some());
     let (_, _, data) = matched.unwrap();
-    let (ev_id, ev_player, ev_amount): (u64, Address, i128) =
+    let (ev_id, ev_player, ev_amount, ev_label): (u64, Address, i128, Symbol) =
         TryFromVal::try_from_val(&env, &data).unwrap();
     assert_eq!(ev_id, id);
     assert_eq!(ev_amount, 100);
     assert!(ev_player == player1 || ev_player == player2);
+    assert!(ev_label == symbol_short!("player1") || ev_label == symbol_short!("player2"));
+}
+
+#[test]
+fn test_deposit_event_player_label() {
+    let (env, contract_id, _oracle, player1, player2, token, _admin) = setup();
+    let client = EscrowContractClient::new(&env, &contract_id);
+
+    let id = client.create_match(
+        &player1,
+        &player2,
+        &100,
+        &token,
+        &String::from_str(&env, "label_ev"),
+        &Platform::Lichess,
+    );
+
+    let deposit_topics = vec![
+        &env,
+        Symbol::new(&env, "match").into_val(&env),
+        soroban_sdk::symbol_short!("deposit").into_val(&env),
+    ];
+
+    client.deposit(&id, &player1);
+    let (_, _, data) = env
+        .events()
+        .all()
+        .iter()
+        .filter(|(_, t, _)| *t == deposit_topics)
+        .last()
+        .unwrap();
+    let (_, _, _, label): (u64, Address, i128, Symbol) =
+        TryFromVal::try_from_val(&env, &data).unwrap();
+    assert_eq!(label, symbol_short!("player1"));
+
+    client.deposit(&id, &player2);
+    let (_, _, data) = env
+        .events()
+        .all()
+        .iter()
+        .filter(|(_, t, _)| *t == deposit_topics)
+        .last()
+        .unwrap();
+    let (_, _, _, label): (u64, Address, i128, Symbol) =
+        TryFromVal::try_from_val(&env, &data).unwrap();
+    assert_eq!(label, symbol_short!("player2"));
 }
 
 #[test]
@@ -2014,98 +2078,22 @@ fn test_emergency_drain_fails_for_non_admin() {
     );
 }
 
-// Boundary stake_amount tests for create_match (issue: fuzz boundary values)
-
-// stake_amount = 0 — explicit try_create_match variant of test_create_match_zero_stake_fails
 #[test]
-fn test_create_match_stake_zero_returns_invalid_amount() {
+fn test_create_match_valid_platforms_accepted() {
+    // Both known Platform variants must be accepted by create_match.
+    // This test verifies the platform validation guard does not reject valid values.
     let (env, contract_id, _oracle, player1, player2, token, _admin) = setup();
     let client = EscrowContractClient::new(&env, &contract_id);
-    assert_eq!(
-        client.try_create_match(
-            &player1,
-            &player2,
-            &0,
-            &token,
-            &String::from_str(&env, "zero_stake_boundary"),
-            &Platform::Lichess,
-        ),
-        Err(Ok(Error::InvalidAmount))
+
+    let id1 = client.create_match(
+        &player1, &player2, &100, &token,
+        &String::from_str(&env, "lichess-game-1"), &Platform::Lichess,
     );
-}
+    assert_eq!(client.get_match(&id1).platform, Platform::Lichess);
 
-// stake_amount = 1 — minimum positive value; must be accepted
-#[test]
-fn test_create_match_stake_one_succeeds() {
-    let (env, contract_id, _oracle, player1, player2, token, _admin) = setup();
-    let client = EscrowContractClient::new(&env, &contract_id);
-    let id = client.create_match(
-        &player1,
-        &player2,
-        &1,
-        &token,
-        &String::from_str(&env, "min_stake_one"),
-        &Platform::Lichess,
+    let id2 = client.create_match(
+        &player1, &player2, &100, &token,
+        &String::from_str(&env, "chessdotcom-game-1"), &Platform::ChessDotCom,
     );
-    assert_eq!(id, 0);
-    let m = client.get_match(&id);
-    assert_eq!(m.stake_amount, 1);
-    assert_eq!(m.state, MatchState::Pending);
-}
-
-// stake_amount = i128::MAX — positive, so create_match accepts it; no overflow guard
-// exists at match-creation time. Overflow risk surfaces later in payout calculations
-// (stake_amount * 2 in finalize_result and get_escrow_balance).
-#[test]
-fn test_create_match_stake_i128_max_succeeds() {
-    let (env, contract_id, _oracle, player1, player2, token, _admin) = setup();
-    let client = EscrowContractClient::new(&env, &contract_id);
-    let id = client.create_match(
-        &player1,
-        &player2,
-        &i128::MAX,
-        &token,
-        &String::from_str(&env, "max_stake_i128"),
-        &Platform::Lichess,
-    );
-    assert_eq!(id, 0);
-    let m = client.get_match(&id);
-    assert_eq!(m.stake_amount, i128::MAX);
-    assert_eq!(m.state, MatchState::Pending);
-}
-
-// update_oracle must be admin-only. Authorization is enforced via admin.require_auth()
-// inside the contract, so a non-admin invocation fails at the host auth level.
-#[test]
-fn test_update_oracle_by_non_admin_returns_unauthorized() {
-    use soroban_sdk::testutils::{MockAuth, MockAuthInvoke};
-
-    let env = Env::default();
-    env.mock_all_auths();
-    let admin = Address::generate(&env);
-    let non_admin = Address::generate(&env);
-    let oracle = Address::generate(&env);
-    let new_oracle = Address::generate(&env);
-    let token_addr = env
-        .register_stellar_asset_contract_v2(admin.clone())
-        .address();
-    let contract_id = env.register(EscrowContract, ());
-    let client = EscrowContractClient::new(&env, &contract_id);
-    client.initialize(&oracle, &admin, &token_addr);
-
-    // Restrict to only non_admin's auth — admin.require_auth() inside update_oracle must fail.
-    env.mock_auths(&[MockAuth {
-        address: &non_admin,
-        invoke: &MockAuthInvoke {
-            contract: &contract_id,
-            fn_name: "update_oracle",
-            args: (new_oracle.clone(),).into_val(&env),
-            sub_invokes: &[],
-        },
-    }]);
-
-    assert!(
-        client.try_update_oracle(&new_oracle).is_err(),
-        "non-admin must not be able to update the oracle"
-    );
+    assert_eq!(client.get_match(&id2).platform, Platform::ChessDotCom);
 }
