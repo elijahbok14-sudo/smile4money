@@ -659,6 +659,8 @@ impl EscrowContract {
         }
 
         let client = token::Client::new(&env, &m.token);
+        let player1_refund: i128 = if m.player1_deposited { m.stake_amount } else { 0 };
+        let player2_refund: i128 = if m.player2_deposited { m.stake_amount } else { 0 };
         if m.player1_deposited {
             client.transfer(&env.current_contract_address(), &m.player1, &m.stake_amount);
         }
@@ -679,7 +681,7 @@ impl EscrowContract {
 
         env.events().publish(
             (Symbol::new(&env, "match"), symbol_short!("cancelled")),
-            (match_id, caller),
+            (match_id, caller, player1_refund, player2_refund),
         );
 
         Ok(())
