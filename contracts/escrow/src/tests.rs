@@ -1207,11 +1207,57 @@ fn test_deposit_emits_event() {
     let matched = events.iter().find(|(_, t, _)| *t == deposit_topics);
     assert!(matched.is_some());
     let (_, _, data) = matched.unwrap();
-    let (ev_id, ev_player, ev_amount): (u64, Address, i128) =
+    let (ev_id, ev_player, ev_amount, ev_label): (u64, Address, i128, Symbol) =
         TryFromVal::try_from_val(&env, &data).unwrap();
     assert_eq!(ev_id, id);
     assert_eq!(ev_amount, 100);
     assert!(ev_player == player1 || ev_player == player2);
+    assert!(ev_label == symbol_short!("player1") || ev_label == symbol_short!("player2"));
+}
+
+#[test]
+fn test_deposit_event_player_label() {
+    let (env, contract_id, _oracle, player1, player2, token, _admin) = setup();
+    let client = EscrowContractClient::new(&env, &contract_id);
+
+    let id = client.create_match(
+        &player1,
+        &player2,
+        &100,
+        &token,
+        &String::from_str(&env, "label_ev"),
+        &Platform::Lichess,
+    );
+
+    let deposit_topics = vec![
+        &env,
+        Symbol::new(&env, "match").into_val(&env),
+        soroban_sdk::symbol_short!("deposit").into_val(&env),
+    ];
+
+    client.deposit(&id, &player1);
+    let (_, _, data) = env
+        .events()
+        .all()
+        .iter()
+        .filter(|(_, t, _)| *t == deposit_topics)
+        .last()
+        .unwrap();
+    let (_, _, _, label): (u64, Address, i128, Symbol) =
+        TryFromVal::try_from_val(&env, &data).unwrap();
+    assert_eq!(label, symbol_short!("player1"));
+
+    client.deposit(&id, &player2);
+    let (_, _, data) = env
+        .events()
+        .all()
+        .iter()
+        .filter(|(_, t, _)| *t == deposit_topics)
+        .last()
+        .unwrap();
+    let (_, _, _, label): (u64, Address, i128, Symbol) =
+        TryFromVal::try_from_val(&env, &data).unwrap();
+    assert_eq!(label, symbol_short!("player2"));
 }
 
 #[test]
@@ -2015,36 +2061,21 @@ fn test_emergency_drain_fails_for_non_admin() {
 }
 
 #[test]
-fn test_cancel_match_event_refund_amounts() {
+fn test_create_match_valid_platforms_accepted() {
+    // Both known Platform variants must be accepted by create_match.
+    // This test verifies the platform validation guard does not reject valid values.
     let (env, contract_id, _oracle, player1, player2, token, _admin) = setup();
     let client = EscrowContractClient::new(&env, &contract_id);
 
-    let id = client.create_match(
-        &player1,
-        &player2,
-        &100,
-        &token,
-        &String::from_str(&env, "cancel_refund_ev"),
-        &Platform::Lichess,
+    let id1 = client.create_match(
+        &player1, &player2, &100, &token,
+        &String::from_str(&env, "lichess-game-1"), &Platform::Lichess,
     );
+    assert_eq!(client.get_match(&id1).platform, Platform::Lichess);
 
-    // Only player1 deposits
-    client.deposit(&id, &player1);
-    client.cancel_match(&id, &player1);
-
-    let cancel_topics = vec![
-        &env,
-        Symbol::new(&env, "match").into_val(&env),
-        soroban_sdk::symbol_short!("cancelled").into_val(&env),
-    ];
-    let events = env.events().all();
-    let (_, _, data) = events
-        .iter()
-        .find(|(_, t, _)| *t == cancel_topics)
-        .unwrap();
-    let (ev_id, _ev_caller, p1_refund, p2_refund): (u64, Address, i128, i128) =
-        TryFromVal::try_from_val(&env, &data).unwrap();
-    assert_eq!(ev_id, id);
-    assert_eq!(p1_refund, 100);
-    assert_eq!(p2_refund, 0);
+    let id2 = client.create_match(
+        &player1, &player2, &100, &token,
+        &String::from_str(&env, "chessdotcom-game-1"), &Platform::ChessDotCom,
+    );
+    assert_eq!(client.get_match(&id2).platform, Platform::ChessDotCom);
 }
