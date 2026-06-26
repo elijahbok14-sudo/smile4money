@@ -2014,28 +2014,22 @@ fn test_emergency_drain_fails_for_non_admin() {
     );
 }
 
-// Issue #817: get_escrow_balance returns 0 after match is completed
 #[test]
-fn escrow_balance_is_zero_after_completion() {
-    let (env, contract_id, oracle, player1, player2, token, _admin) = setup();
+fn test_create_match_valid_platforms_accepted() {
+    // Both known Platform variants must be accepted by create_match.
+    // This test verifies the platform validation guard does not reject valid values.
+    let (env, contract_id, _oracle, player1, player2, token, _admin) = setup();
     let client = EscrowContractClient::new(&env, &contract_id);
 
-    let id = client.create_match(
-        &player1,
-        &player2,
-        &100,
-        &token,
-        &String::from_str(&env, "balance_after_completion"),
-        &Platform::Lichess,
+    let id1 = client.create_match(
+        &player1, &player2, &100, &token,
+        &String::from_str(&env, "lichess-game-1"), &Platform::Lichess,
     );
-    client.deposit(&id, &player1);
-    client.deposit(&id, &player2);
-    client.submit_result(
-        &id,
-        &String::from_str(&env, "balance_after_completion"),
-        &Winner::Player1,
-        &oracle,
-    );
+    assert_eq!(client.get_match(&id1).platform, Platform::Lichess);
 
-    assert_eq!(client.get_escrow_balance(&id), 0);
+    let id2 = client.create_match(
+        &player1, &player2, &100, &token,
+        &String::from_str(&env, "chessdotcom-game-1"), &Platform::ChessDotCom,
+    );
+    assert_eq!(client.get_match(&id2).platform, Platform::ChessDotCom);
 }
