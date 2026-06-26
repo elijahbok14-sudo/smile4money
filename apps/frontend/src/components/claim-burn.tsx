@@ -93,7 +93,18 @@ export function ClaimBurn({
 
   function handleRequestSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    if (!isValidAmount(amount)) return;
+    if (!isValidAmount(amount)) {
+      setStatus('error');
+      setErrorMsg('Please enter a valid amount greater than 0.');
+      setTxHash(null);
+      return;
+    }
+    if (walletState !== 'connected') {
+      setStatus('error');
+      setErrorMsg('Connect your wallet to continue.');
+      setTxHash(null);
+      return;
+    }
     setStatus('confirm');
   }
 
@@ -117,6 +128,10 @@ export function ClaimBurn({
     setStatus('idle');
     setTimeout(() => amountInputRef.current?.focus(), 0);
   }
+
+  const isPending = status === 'pending';
+  const showConfirm = status === 'confirm';
+  const valid = isValidAmount(amount);
 
   // ── Wallet state screens ──────────────────────────────────────────
 
@@ -152,20 +167,65 @@ export function ClaimBurn({
 
   if (walletState === 'disconnected') {
     return (
-      <div className="dark:bg-slate-900 flex flex-col items-center justify-center rounded-xl bg-slate-50 p-10 text-center" data-testid="wallet-disconnected">
-        <span className="mb-4 text-4xl">💼</span>
-        <h3 className="dark:text-slate-100 mb-2 text-lg font-semibold text-slate-900">Connect Your Wallet</h3>
-        <p className="dark:text-slate-400 mb-4 text-sm text-slate-500">
-          Connect your Freighter wallet to claim rewards or burn tokens.
-        </p>
-        <button
-          type="button"
-          onClick={onConnect}
-          data-testid="connect-wallet-btn"
-          className="inline-flex w-full items-center justify-center rounded-lg bg-gradient-to-r from-violet-600 to-violet-700 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition-all hover:from-violet-700 hover:to-violet-800 hover:shadow-md disabled:cursor-not-allowed disabled:opacity-50"
+      <div className="claim-burn" data-testid="wallet-disconnected">
+        <h2 className="claim-burn-title">Claim &amp; Burn</h2>
+        <div className="wallet-state" data-testid="wallet-disconnected-state">
+          <span className="wallet-state-icon">💼</span>
+          <h3 className="wallet-state-title">Connect Your Wallet</h3>
+          <p className="wallet-state-message">
+            Connect your Freighter wallet to claim rewards or burn tokens.
+          </p>
+          <button
+            className="btn btn-connect focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-2"
+            onClick={onConnect}
+            data-testid="connect-wallet-btn"
+            aria-label="Connect wallet"
+          >
+            Connect Wallet
+          </button>
+        </div>
+        <form
+          onSubmit={handleRequestSubmit}
+          data-testid="claim-burn-form"
+          aria-label={`${mode === 'claim' ? 'Claim' : 'Burn'} tokens`}
         >
-          Connect Wallet
-        </button>
+          <div className="form-group">
+            <label htmlFor="amount-input">Amount ({tokenSymbol})</label>
+            <div className="input-row">
+              <input
+                ref={amountInputRef}
+                id="amount-input"
+                type="number"
+                min="0"
+                step="any"
+                value={amount}
+                onChange={handleAmountChange}
+                disabled
+                placeholder="0.00"
+                data-testid="amount-input"
+                aria-invalid={amount !== '' && !valid}
+                aria-label={`${mode === 'claim' ? 'Claim' : 'Burn'} amount`}
+                aria-describedby={status === 'error' ? 'claim-burn-error' : undefined}
+                className="focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-2"
+              />
+            </div>
+          </div>
+          <button
+            type="submit"
+            className={`btn btn-${mode} focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-2`}
+            disabled={true}
+            data-testid="submit-btn"
+            aria-busy={isPending}
+            aria-label={`${mode === 'claim' ? 'Claim' : 'Burn'} disabled until wallet is connected`}
+          >
+            {mode === 'claim' ? 'Claim' : 'Burn'}
+          </button>
+        </form>
+        {status === 'error' && (
+          <p className="feedback error" role="alert" data-testid="error-msg" id="claim-burn-error">
+            {errorMsg}
+          </p>
+        )}
       </div>
     );
   }
@@ -183,7 +243,7 @@ export function ClaimBurn({
           type="button"
           onClick={onSwitchNetwork}
           data-testid="switch-network-btn"
-          className="inline-flex w-full items-center justify-center rounded-lg bg-gradient-to-r from-violet-600 to-violet-700 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition-all hover:from-violet-700 hover:to-violet-800 hover:shadow-md disabled:cursor-not-allowed disabled:opacity-50"
+          aria-label={`Switch to ${expectedNetwork} network`}
         >
           Switch to {expectedNetwork}
         </button>
@@ -203,7 +263,7 @@ export function ClaimBurn({
           type="button"
           onClick={onConnect}
           data-testid="retry-connect-btn"
-          className="inline-flex w-full items-center justify-center rounded-lg bg-gradient-to-r from-violet-600 to-violet-700 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition-all hover:from-violet-700 hover:to-violet-800 hover:shadow-md disabled:cursor-not-allowed disabled:opacity-50"
+          aria-label="Retry wallet connection"
         >
           Try Again
         </button>
@@ -213,10 +273,6 @@ export function ClaimBurn({
 
   // ── Connected UI ──────────────────────────────────────────────────
 
-  const isPending = status === 'pending';
-  const showConfirm = status === 'confirm';
-  const valid = isValidAmount(amount);
-
   return (
     <div className="dark:bg-slate-900 dark:border-slate-700 w-full max-w-md rounded-xl border border-slate-200 bg-white p-6 shadow-sm" data-testid="claim-burn">
       <h2 className="dark:text-slate-100 mb-5 text-center text-xl font-semibold text-slate-900">Claim &amp; Burn</h2>
@@ -225,27 +281,21 @@ export function ClaimBurn({
       <div className="dark:bg-slate-800 mb-5 flex rounded-lg bg-slate-100 p-1" role="group" aria-label="Select mode">
         <button
           type="button"
+          className={`toggle-btn${mode === 'claim' ? ' active' : ''} focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-2`}
           onClick={() => handleToggle('claim')}
           aria-pressed={mode === 'claim'}
           data-testid="toggle-claim"
-          className={`flex-1 rounded-md px-4 py-2 text-sm font-medium transition-all ${
-            mode === 'claim'
-              ? 'bg-white text-violet-700 shadow-sm dark:bg-slate-700 dark:text-violet-400'
-              : 'text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200'
-          }`}
+          aria-label="Switch to claim mode"
         >
           Claim
         </button>
         <button
           type="button"
+          className={`toggle-btn${mode === 'burn' ? ' active' : ''} focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-2`}
           onClick={() => handleToggle('burn')}
           aria-pressed={mode === 'burn'}
           data-testid="toggle-burn"
-          className={`flex-1 rounded-md px-4 py-2 text-sm font-medium transition-all ${
-            mode === 'burn'
-              ? 'bg-white text-violet-700 shadow-sm dark:bg-slate-700 dark:text-violet-400'
-              : 'text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200'
-          }`}
+          aria-label="Switch to burn mode"
         >
           Burn
         </button>
@@ -261,10 +311,10 @@ export function ClaimBurn({
             </span>
             {onDisconnect && (
               <button
-                type="button"
+                className="btn-disconnect focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-2"
                 onClick={onDisconnect}
                 data-testid="disconnect-btn"
-                className="ml-auto rounded-md border border-slate-300 bg-white px-2 py-1 text-xs font-medium text-slate-600 transition-colors hover:bg-red-50 hover:text-red-600 hover:border-red-200 dark:border-slate-600 dark:bg-slate-700 dark:text-slate-300 dark:hover:bg-red-900/20 dark:hover:text-red-400"
+                aria-label="Disconnect wallet"
               >
                 Disconnect
               </button>
@@ -311,23 +361,20 @@ export function ClaimBurn({
           <div className="grid grid-cols-2 gap-3">
             <button
               type="button"
+              className="btn btn-cancel focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-2"
               onClick={handleCancel}
               data-testid="cancel-btn"
-              className="rounded-lg border border-slate-300 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 transition-colors hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-600 dark:bg-slate-700 dark:text-slate-300 dark:hover:bg-slate-600"
+              aria-label="Cancel confirmation"
             >
               Cancel
             </button>
             <button
               ref={confirmBtnRef}
               type="button"
+              className={`btn btn-${mode} focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-2`}
               onClick={handleConfirm}
               data-testid="confirm-btn"
-              disabled={isPending}
-              className={`rounded-lg px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition-all disabled:cursor-not-allowed disabled:opacity-50 ${
-                mode === 'claim'
-                  ? 'bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-600 hover:to-emerald-700 hover:shadow'
-                  : 'bg-gradient-to-r from-red-500 to-red-600 hover:from-red-600 hover:to-red-700 hover:shadow'
-              }`}
+              aria-label={`Confirm ${mode}`}
             >
               {isPending ? 'Processing…' : 'Confirm'}
             </button>
@@ -354,11 +401,14 @@ export function ClaimBurn({
               placeholder="0.00"
               data-testid="amount-input"
               aria-invalid={amount !== '' && !valid}
-              className={`dark:bg-slate-800 dark:border-slate-600 dark:text-slate-100 dark:placeholder:text-slate-500 dark:focus:border-violet-500 dark:focus:ring-violet-500/20 flex-1 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 outline-none transition-all placeholder:text-slate-400 focus:border-violet-500 focus:ring-4 focus:ring-violet-500/10 disabled:cursor-not-allowed disabled:opacity-60`}
+              aria-label={`${mode === 'claim' ? 'Claim' : 'Burn'} amount`}
+              aria-describedby={status === 'error' ? 'claim-burn-error' : undefined}
+              className="focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-2"
             />
             {balance != null && (
               <button
                 type="button"
+                className="btn-max focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-2"
                 onClick={handleMax}
                 disabled={isPending}
                 data-testid="max-btn"
@@ -379,14 +429,11 @@ export function ClaimBurn({
         {!showConfirm && (
           <button
             type="submit"
-            disabled={isPending || !valid}
+            className={`btn btn-${mode} focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-2`}
+            disabled={isPending || !valid || walletState !== 'connected'}
             data-testid="submit-btn"
             aria-busy={isPending}
-            className={`mt-4 w-full rounded-lg px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition-all disabled:cursor-not-allowed disabled:opacity-50 ${
-              mode === 'claim'
-                ? 'bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-600 hover:to-emerald-700 hover:shadow-md'
-                : 'bg-gradient-to-r from-red-500 to-red-600 hover:from-red-600 hover:to-red-700 hover:shadow-md'
-            }`}
+            aria-label={`${mode === 'claim' ? 'Claim' : 'Burn'} tokens`}
           >
             {isPending ? (mode === 'claim' ? 'Claiming…' : 'Burning…') : (mode === 'claim' ? 'Claim' : 'Burn')}
           </button>
@@ -407,7 +454,7 @@ export function ClaimBurn({
         </p>
       )}
       {status === 'error' && (
-        <p className="dark:border-red-800 dark:bg-red-900/30 dark:text-red-400 mt-4 rounded-lg border border-red-200 bg-red-50 p-3 text-center text-sm font-medium text-red-800" role="alert" data-testid="error-msg">
+        <p className="feedback error" role="alert" data-testid="error-msg" id="claim-burn-error">
           {errorMsg}
         </p>
       )}
