@@ -483,7 +483,7 @@ fn test_deposit_into_completed_match_fails() {
 }
 
 #[test]
-fn test_deposit_into_cancelled_match_fails() {
+fn test_deposit_after_cancel_returns_match_cancelled() {
     let (env, contract_id, _oracle, player1, player2, token, _admin) = setup();
     let client = EscrowContractClient::new(&env, &contract_id);
 
