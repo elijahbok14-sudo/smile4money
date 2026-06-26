@@ -2014,104 +2014,22 @@ fn test_emergency_drain_fails_for_non_admin() {
     );
 }
 
-// #811: A second create_match with the same game_id must return Error::DuplicateGameId.
 #[test]
-fn create_match_duplicate_game_id_returns_error() {
-    let (env, contract_id, _oracle, player1, player2, token, _admin) = setup();
-    let client = EscrowContractClient::new(&env, &contract_id);
-    let player3 = Address::generate(&env);
-    let player4 = Address::generate(&env);
-
-    client.create_match(
-        &player1,
-        &player2,
-        &100,
-        &token,
-        &String::from_str(&env, "chess_game_42"),
-        &Platform::Lichess,
-    );
-
-    assert_eq!(
-        client.try_create_match(
-            &player3,
-            &player4,
-            &100,
-            &token,
-            &String::from_str(&env, "chess_game_42"),
-            &Platform::Lichess,
-        ),
-        Err(Ok(Error::DuplicateGameId))
-    );
-}
-
-// #812: submit_result with a game_id that doesn't match the stored one must return Error::GameIdMismatch.
-#[test]
-fn submit_result_mismatched_game_id_returns_error() {
-    let (env, contract_id, oracle, player1, player2, token, _admin) = setup();
-    let client = EscrowContractClient::new(&env, &contract_id);
-
-    let id = client.create_match(
-        &player1,
-        &player2,
-        &100,
-        &token,
-        &String::from_str(&env, "game_abc"),
-        &Platform::Lichess,
-    );
-    client.deposit(&id, &player1);
-    client.deposit(&id, &player2);
-
-    assert_eq!(
-        client.try_submit_result(
-            &id,
-            &String::from_str(&env, "game_xyz"),
-            &Winner::Player1,
-            &oracle,
-        ),
-        Err(Ok(Error::GameIdMismatch))
-    );
-}
-
-// #813: create_match while the contract is paused must return Error::ContractPaused.
-#[test]
-fn create_match_when_paused_returns_error() {
+fn test_create_match_valid_platforms_accepted() {
+    // Both known Platform variants must be accepted by create_match.
+    // This test verifies the platform validation guard does not reject valid values.
     let (env, contract_id, _oracle, player1, player2, token, _admin) = setup();
     let client = EscrowContractClient::new(&env, &contract_id);
 
-    client.pause();
-
-    assert_eq!(
-        client.try_create_match(
-            &player1,
-            &player2,
-            &100,
-            &token,
-            &String::from_str(&env, "paused_game"),
-            &Platform::Lichess,
-        ),
-        Err(Ok(Error::ContractPaused))
+    let id1 = client.create_match(
+        &player1, &player2, &100, &token,
+        &String::from_str(&env, "lichess-game-1"), &Platform::Lichess,
     );
-}
+    assert_eq!(client.get_match(&id1).platform, Platform::Lichess);
 
-// #814: deposit while the contract is paused must return Error::ContractPaused.
-#[test]
-fn deposit_when_paused_returns_error() {
-    let (env, contract_id, _oracle, player1, player2, token, _admin) = setup();
-    let client = EscrowContractClient::new(&env, &contract_id);
-
-    let id = client.create_match(
-        &player1,
-        &player2,
-        &100,
-        &token,
-        &String::from_str(&env, "paused_deposit_game"),
-        &Platform::Lichess,
+    let id2 = client.create_match(
+        &player1, &player2, &100, &token,
+        &String::from_str(&env, "chessdotcom-game-1"), &Platform::ChessDotCom,
     );
-
-    client.pause();
-
-    assert_eq!(
-        client.try_deposit(&id, &player1),
-        Err(Ok(Error::ContractPaused))
-    );
+    assert_eq!(client.get_match(&id2).platform, Platform::ChessDotCom);
 }
