@@ -2013,3 +2013,25 @@ fn test_emergency_drain_fails_for_non_admin() {
         Err(Ok(Error::Unauthorized))
     );
 }
+
+// Issue #819: is_funded returns false before both deposits and true after both
+#[test]
+fn is_funded_transitions_correctly() {
+    let (env, contract_id, _oracle, player1, player2, token, _admin) = setup();
+    let client = EscrowContractClient::new(&env, &contract_id);
+
+    let id = client.create_match(
+        &player1,
+        &player2,
+        &100,
+        &token,
+        &String::from_str(&env, "funded_transitions"),
+        &Platform::Lichess,
+    );
+
+    assert!(!client.is_funded(&id)); // before any deposit
+    client.deposit(&id, &player1);
+    assert!(!client.is_funded(&id)); // after one deposit
+    client.deposit(&id, &player2);
+    assert!(client.is_funded(&id)); // after both deposits
+}
