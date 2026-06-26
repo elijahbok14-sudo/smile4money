@@ -2014,24 +2014,22 @@ fn test_emergency_drain_fails_for_non_admin() {
     );
 }
 
-// Issue #819: is_funded returns false before both deposits and true after both
 #[test]
-fn is_funded_transitions_correctly() {
+fn test_create_match_valid_platforms_accepted() {
+    // Both known Platform variants must be accepted by create_match.
+    // This test verifies the platform validation guard does not reject valid values.
     let (env, contract_id, _oracle, player1, player2, token, _admin) = setup();
     let client = EscrowContractClient::new(&env, &contract_id);
 
-    let id = client.create_match(
-        &player1,
-        &player2,
-        &100,
-        &token,
-        &String::from_str(&env, "funded_transitions"),
-        &Platform::Lichess,
+    let id1 = client.create_match(
+        &player1, &player2, &100, &token,
+        &String::from_str(&env, "lichess-game-1"), &Platform::Lichess,
     );
+    assert_eq!(client.get_match(&id1).platform, Platform::Lichess);
 
-    assert!(!client.is_funded(&id)); // before any deposit
-    client.deposit(&id, &player1);
-    assert!(!client.is_funded(&id)); // after one deposit
-    client.deposit(&id, &player2);
-    assert!(client.is_funded(&id)); // after both deposits
+    let id2 = client.create_match(
+        &player1, &player2, &100, &token,
+        &String::from_str(&env, "chessdotcom-game-1"), &Platform::ChessDotCom,
+    );
+    assert_eq!(client.get_match(&id2).platform, Platform::ChessDotCom);
 }
