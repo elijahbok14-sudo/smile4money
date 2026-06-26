@@ -1207,11 +1207,57 @@ fn test_deposit_emits_event() {
     let matched = events.iter().find(|(_, t, _)| *t == deposit_topics);
     assert!(matched.is_some());
     let (_, _, data) = matched.unwrap();
-    let (ev_id, ev_player, ev_amount): (u64, Address, i128) =
+    let (ev_id, ev_player, ev_amount, ev_label): (u64, Address, i128, Symbol) =
         TryFromVal::try_from_val(&env, &data).unwrap();
     assert_eq!(ev_id, id);
     assert_eq!(ev_amount, 100);
     assert!(ev_player == player1 || ev_player == player2);
+    assert!(ev_label == symbol_short!("player1") || ev_label == symbol_short!("player2"));
+}
+
+#[test]
+fn test_deposit_event_player_label() {
+    let (env, contract_id, _oracle, player1, player2, token, _admin) = setup();
+    let client = EscrowContractClient::new(&env, &contract_id);
+
+    let id = client.create_match(
+        &player1,
+        &player2,
+        &100,
+        &token,
+        &String::from_str(&env, "label_ev"),
+        &Platform::Lichess,
+    );
+
+    let deposit_topics = vec![
+        &env,
+        Symbol::new(&env, "match").into_val(&env),
+        soroban_sdk::symbol_short!("deposit").into_val(&env),
+    ];
+
+    client.deposit(&id, &player1);
+    let (_, _, data) = env
+        .events()
+        .all()
+        .iter()
+        .filter(|(_, t, _)| *t == deposit_topics)
+        .last()
+        .unwrap();
+    let (_, _, _, label): (u64, Address, i128, Symbol) =
+        TryFromVal::try_from_val(&env, &data).unwrap();
+    assert_eq!(label, symbol_short!("player1"));
+
+    client.deposit(&id, &player2);
+    let (_, _, data) = env
+        .events()
+        .all()
+        .iter()
+        .filter(|(_, t, _)| *t == deposit_topics)
+        .last()
+        .unwrap();
+    let (_, _, _, label): (u64, Address, i128, Symbol) =
+        TryFromVal::try_from_val(&env, &data).unwrap();
+    assert_eq!(label, symbol_short!("player2"));
 }
 
 #[test]
